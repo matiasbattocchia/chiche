@@ -47,10 +47,9 @@ import {
   Type,
 } from "@google/genai";
 import { decodeBase64, encodeBase64 } from "@std/encoding/base64";
-import { type Mic, Speaker, startMic } from "./audio.ts";
-import { type Aec, loadAec } from "./aec.ts";
 import { holdSupported, readKeys, restoreKeyboard } from "./keys.ts";
 import { connectMu, type Mu, type MuUpdate } from "./mu.ts";
+import { dim, onSignals, out, startAudio, transcript } from "./shell.ts";
 
 const MODEL = "gemini-3.1-flash-live-preview";
 const VOICE = "Kore";
@@ -80,12 +79,7 @@ const KEY_Q = 113;
 const KEY_C = 99;
 const KEY_M = 109;
 
-const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
-const italic = (s: string) => `\x1b[3m${s}\x1b[0m`;
-const cyan = (s: string) => `\x1b[36m${s}\x1b[0m`;
-
-const encoder = new TextEncoder();
-const out = (s: string) => Deno.stdout.writeSync(encoder.encode(s));
+const { transcribe, status } = transcript({ user: "vos  › ", model: "voz › " });
 
 // --- Session state ---
 
@@ -118,35 +112,10 @@ async function dropHandle(reason: string) {
   await Deno.remove(HANDLE_FILE).catch(() => {});
 }
 
-// `let` with definite assignment: initialized once at startup, after the AEC
-// module load it depends on; a signal handler may read it before then.
-// deno-lint-ignore prefer-const
-let speaker!: Speaker;
-let mic: Mic | null = null;
-let aec: Aec | null = null;
 let mu: Mu | null = null;
 
 /** Updates that arrived while the socket was down, replayed on reconnect. */
 const backlog: MuUpdate[] = [];
-
-// --- Transcript ---
-
-let lastVoice: "user" | "model" | "status" | null = null;
-
-function transcribe(voice: "user" | "model", text: string) {
-  if (voice !== lastVoice) {
-    if (lastVoice !== null) out("\n");
-    out(voice === "user" ? dim("vos  › ") : cyan("voz › "));
-    lastVoice = voice;
-  }
-  out(voice === "user" ? italic(dim(text)) : text);
-}
-
-function status(text: string) {
-  if (lastVoice !== null) out("\n");
-  out(dim(`· ${text}\n`));
-  lastVoice = "status";
-}
 
 // --- The channel to mu ---
 
@@ -226,10 +195,10 @@ function handleMessage(message: LiveServerMessage) {
   const content = message.serverContent;
   if (!content) return;
 
-  if (content.interrupted) speaker.interrupt();
+  if (content.interrupted) rig.speaker.interrupt();
   else {
     for (const part of content.modelTurn?.parts ?? []) {
-      if (part.inlineData?.data) speaker.write(decodeBase64(part.inlineData.data));
+      if (part.inlineData?.data) rig.speaker.write(decodeBase64(part.inlineData.data));
     }
   }
 
@@ -244,11 +213,11 @@ function setTalking(on: boolean) {
   if (!PTT || on === talking || !session) return;
   if (on) {
     talking = true;
-    speaker.interrupt(); // talking over the model is a barge-in
+    rig.speaker.interrupt(); // talking over the model is a barge-in
     session.sendRealtimeInput({ activityStart: {} });
   } else {
     // Flush the buffered tail while `talking` still lets it through the mic guard.
-    mic?.flush();
+    rig.mic.flush();
     talking = false;
     session.sendRealtimeInput({ activityEnd: {} });
   }
@@ -329,7 +298,7 @@ function onKey(event: { code: number; ctrl: boolean; type: string }): boolean | 
     muted = !muted;
     status(muted ? "micrófono en silencio" : "micrófono abierto");
   } else if (event.code === KEY_SPACE) {
-    speaker.interrupt();
+    rig.speaker.interrupt();
   }
 }
 
@@ -340,37 +309,22 @@ async function cleanup() {
   if (cleanedUp) return;
   cleanedUp = true;
   mu?.close(); // detaching is what ends mu: its daemon reaps itself a linger later
-  await mic?.stop();
-  speaker?.close();
-  await aec?.unload(); // last: the module only goes once nothing captures from it
+  await rig.stop();
   restoreKeyboard();
   if (Deno.stdin.isTerminal()) Deno.stdin.setRaw(false);
 }
 
-const SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
-for (const [signal, num] of Object.entries(SIGNALS)) {
-  Deno.addSignalListener(signal as keyof typeof SIGNALS, async () => {
-    await cleanup();
-    Deno.exit(128 + num);
-  });
-}
-
 // --- Startup ---
 
-if (AEC) {
-  const result = await loadAec();
-  if ("error" in result) status(`sin cancelación de eco: ${result.error}`);
-  else aec = result;
-}
-
-speaker = new Speaker({ target: aec?.sink });
-mic = startMic((chunk) => {
+const rig = await startAudio(AEC, (chunk) => {
   if (!session) return;
   if (PTT ? !talking : muted) return;
   session.sendRealtimeInput({
     audio: { data: encodeBase64(chunk), mimeType: "audio/pcm;rate=16000" },
   });
-}, { target: aec?.source });
+}, (error) => status(`sin cancelación de eco: ${error}`));
+
+onSignals(cleanup);
 
 out(dim(`relay · ${MODEL}${TEST ? " · sin mu" : " + mu"}\n`));
 
@@ -427,7 +381,7 @@ while (running) {
   await Promise.race([closed, keys]);
   session?.close();
   session = null;
-  speaker.interrupt();
+  rig.speaker.interrupt();
   // A resume the server accepts at the socket but hangs up on without a word is the
   // other face of a stale handle; keeping it would reconnect into the same hangup.
   if (running && resumptionHandle && !gotMessage) {

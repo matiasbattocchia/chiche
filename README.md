@@ -70,6 +70,7 @@ mu's daemon is raised on demand and reaps itself ~30s after the REPL detaches.
 | `main.ts` | session, transcripts, keybindings, reconnect loop |
 | `relay.ts` | the two-agent mode: voice ↔ mu |
 | `mu.ts` | mu attach client, flattened to activity / final / error |
+| `shell.ts` | what main and relay share: transcript, signals, the audio rig |
 | `audio.ts` | `pw-record` capture and `pw-play` playback |
 | `aec.ts` | echo-cancel module lifecycle |
 | `keys.ts` | stdin reader, kitty keyboard protocol for key releases |

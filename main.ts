@@ -19,9 +19,8 @@ import {
   type Session,
 } from "@google/genai";
 import { decodeBase64, encodeBase64 } from "@std/encoding/base64";
-import { type Mic, Speaker, startMic } from "./audio.ts";
-import { type Aec, loadAec } from "./aec.ts";
 import { holdSupported, readKeys, restoreKeyboard } from "./keys.ts";
+import { dim, onSignals, out, startAudio, transcript } from "./shell.ts";
 
 const MODEL = "gemini-3.1-flash-live-preview";
 const VOICE = "Kore";
@@ -52,12 +51,12 @@ const KEY_M = 109;
 const KEY_Q = 113;
 const KEY_C = 99;
 
-const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
-const italic = (s: string) => `\x1b[3m${s}\x1b[0m`;
-const cyan = (s: string) => `\x1b[36m${s}\x1b[0m`;
+const t = transcript({ user: "you  › ", model: "gemini › " });
+const { transcribe, status } = t;
 
-const encoder = new TextEncoder();
-const out = (s: string) => Deno.stdout.writeSync(encoder.encode(s));
+function vadEvent(text: string) {
+  if (SHOW_VAD_EVENTS) t.vadEvent(text);
+}
 
 // --- Session state ---
 
@@ -70,40 +69,6 @@ let running = true;
 let userSpeaking = false;
 /** Push-to-talk only: whether the key is currently held (or toggled on). */
 let talking = false;
-
-// `let` with definite assignment: initialized once at startup, after the AEC
-// module load it depends on; a signal handler may read it before then.
-// deno-lint-ignore prefer-const
-let speaker!: Speaker;
-let mic: Mic | null = null;
-let aec: Aec | null = null;
-
-// --- Transcript rendering ---
-
-/** Who spoke last, so we can break the line when the turn flips. */
-let lastVoice: "user" | "model" | "status" | null = null;
-
-function transcribe(voice: "user" | "model", text: string) {
-  if (voice !== lastVoice) {
-    if (lastVoice !== null) out("\n");
-    out(voice === "user" ? dim("you  › ") : cyan("gemini › "));
-    lastVoice = voice;
-  }
-  out(voice === "user" ? italic(dim(text)) : text);
-}
-
-function status(text: string) {
-  if (lastVoice !== null) out("\n");
-  out(dim(`· ${text}\n`));
-  lastVoice = "status";
-}
-
-function vadEvent(text: string) {
-  if (!SHOW_VAD_EVENTS) return;
-  if (lastVoice !== null) out("\n");
-  out(dim(`  [${text}]\n`));
-  lastVoice = "status";
-}
 
 // --- Server messages ---
 
@@ -124,7 +89,7 @@ function handleMessage(message: LiveServerMessage) {
   // every field gets processed rather than stopping at the first hit.
   const interrupted = content.interrupted === true;
   if (interrupted) {
-    speaker.interrupt();
+    rig.speaker.interrupt();
     if (!PTT) {
       vadEvent("speech detected · barge-in");
       userSpeaking = true;
@@ -133,7 +98,7 @@ function handleMessage(message: LiveServerMessage) {
 
   if (!interrupted) {
     for (const part of content.modelTurn?.parts ?? []) {
-      if (part.inlineData?.data) speaker.write(decodeBase64(part.inlineData.data));
+      if (part.inlineData?.data) rig.speaker.write(decodeBase64(part.inlineData.data));
     }
   }
 
@@ -175,13 +140,13 @@ function setTalking(on: boolean) {
   if (!PTT || on === talking || !session) return;
   if (on) {
     talking = true;
-    speaker.interrupt(); // talking over the model is a barge-in
+    rig.speaker.interrupt(); // talking over the model is a barge-in
     session.sendRealtimeInput({ activityStart: {} });
     vadEvent("activity start");
   } else {
     // Flush the buffered tail while `talking` still lets it through the mic
     // guard, so the last partial frame lands inside the turn.
-    mic?.flush();
+    rig.mic.flush();
     talking = false;
     session.sendRealtimeInput({ activityEnd: {} });
     vadEvent("activity end");
@@ -249,7 +214,7 @@ function onKey(event: { code: number; ctrl: boolean; type: string }): boolean | 
     muted = !muted;
     status(muted ? "mic muted" : "mic live");
   } else if (event.code === KEY_SPACE) {
-    speaker.interrupt();
+    rig.speaker.interrupt();
     status("playback stopped");
   }
 }
@@ -260,49 +225,27 @@ let cleanedUp = false;
 async function cleanup() {
   if (cleanedUp) return;
   cleanedUp = true;
-  await mic?.stop();
-  speaker?.close();
-  // Always last: the module can only go once nothing is capturing from it.
-  await aec?.unload();
+  await rig.stop();
   restoreKeyboard();
   if (Deno.stdin.isTerminal()) Deno.stdin.setRaw(false);
 }
 
-// Raw mode means Ctrl+C arrives as a keystroke, not a signal — but an external
-// kill still has to unload the PipeWire module rather than leak it.
-const SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
-for (const [signal, num] of Object.entries(SIGNALS)) {
-  Deno.addSignalListener(signal as keyof typeof SIGNALS, async () => {
-    await cleanup();
-    Deno.exit(128 + num);
-  });
-}
-
 // --- Startup ---
 
-if (AEC) {
-  const result = await loadAec();
-  if ("error" in result) {
-    status(`echo cancellation unavailable: ${result.error}`);
-  } else {
-    aec = result;
-  }
-}
-
-speaker = new Speaker({ target: aec?.sink });
-
-mic = startMic((chunk) => {
+const rig = await startAudio(AEC, (chunk) => {
   if (!session) return;
   if (PTT ? !talking : muted) return;
   session.sendRealtimeInput({
     audio: { data: encodeBase64(chunk), mimeType: "audio/pcm;rate=16000" },
   });
-}, { target: aec?.source });
+}, (error) => status(`echo cancellation unavailable: ${error}`));
+
+onSignals(cleanup);
 
 out(
   dim(`Live API · ${MODEL}\n`) +
     dim(
-      aec
+      rig.aec
         ? "echo cancellation: on · noise suppression: webrtc\n"
         : "echo cancellation: off · noise suppression: off\n",
     ),
@@ -322,7 +265,7 @@ setTimeout(() => {
     ));
   } else {
     out(dim("m: mute · space: interrupt · q: quit\n"));
-    if (!aec) {
+    if (!rig.aec) {
       out(dim("No echo cancellation: wear headphones, or the model hears itself.\n"));
     }
   }
@@ -342,7 +285,7 @@ while (running) {
   await Promise.race([closed, keys]);
   session?.close();
   session = null;
-  speaker.interrupt();
+  rig.speaker.interrupt();
 }
 
 await cleanup();
