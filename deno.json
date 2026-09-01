@@ -1,0 +1,12 @@
+{
+  "nodeModulesDir": "auto",
+  "imports": {
+    "@google/genai": "npm:@google/genai@^2.19.0/web",
+    "@std/encoding/base64": "jsr:@std/encoding@^1.0.10/base64"
+  },
+  "tasks": {
+    "start": "deno run --allow-env --allow-net --allow-read --allow-sys --allow-run=pw-record,pw-play,pactl main.ts",
+    "ptt": "deno task start --ptt",
+    "raw": "deno task start --no-aec"
+  }
+}

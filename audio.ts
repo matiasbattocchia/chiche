@@ -1,0 +1,190 @@
+/**
+ * Raw audio capture and playback via PipeWire subprocesses.
+ *
+ * The Live API speaks mono PCM s16le: 16 kHz in, 24 kHz out. PipeWire handles
+ * resampling to and from the hardware's native 48 kHz.
+ */
+
+/** 40 ms at 16 kHz mono s16 = 1280 bytes, the chunk size the docs recommend. */
+const FRAME_BYTES = 1280;
+
+/**
+ * How long a partial frame may sit before being sent anyway. The pipe delivers
+ * ~20 ms per read, so one frame interval (2× that) of silence means the
+ * producer has genuinely stalled, not just jittered.
+ */
+const FLUSH_MS = 40;
+
+export interface Mic {
+  /** Sends any buffered partial frame immediately (e.g. before closing a turn). */
+  flush(): void;
+  stop(): Promise<void>;
+}
+
+/**
+ * Starts microphone capture and hands back 16 kHz chunks as they arrive.
+ *
+ * Reads (~640 bytes each at 20 ms pipe latency) are coalesced into full
+ * FRAME_BYTES frames; at most one partial frame is ever held back, and only
+ * for FLUSH_MS before a timeout sends it anyway. Noise suppression, when there
+ * is any, comes from the echo-cancel module upstream (see aec.ts) rather than
+ * from a filter in this pipe.
+ */
+export function startMic(
+  onChunk: (chunk: Uint8Array) => void,
+  { target }: { target?: string } = {},
+): Mic {
+  const record = new Deno.Command("pw-record", {
+    args: [
+      ...(target ? ["--target", target] : []),
+      "--rate", "16000",
+      "--channels", "1",
+      "--format", "s16",
+      "--latency", "20ms",
+      "--raw",
+      "-",
+    ],
+    stdout: "piped",
+    stderr: "null",
+  }).spawn();
+
+  /** Partial frame carried over between reads; fresh per capture session. */
+  let pending = new Uint8Array(0);
+  let flushTimer: number | undefined;
+
+  // A throwing consumer must not unwind the read loop or a timer, or the mic
+  // goes silent for the rest of the run.
+  const emit = (chunk: Uint8Array) => {
+    try {
+      onChunk(chunk);
+    } catch { /* dropped chunk */ }
+  };
+
+  const flush = () => {
+    clearTimeout(flushTimer);
+    flushTimer = undefined;
+    if (pending.length === 0) return;
+    const tail = pending;
+    pending = new Uint8Array(0);
+    emit(tail);
+  };
+
+  (async () => {
+    for await (const buf of record.stdout) {
+      clearTimeout(flushTimer);
+      let data = buf;
+      if (pending.length > 0) {
+        data = new Uint8Array(pending.length + buf.length);
+        data.set(pending);
+        data.set(buf, pending.length);
+      }
+      let i = 0;
+      for (; i + FRAME_BYTES <= data.length; i += FRAME_BYTES) {
+        emit(data.subarray(i, i + FRAME_BYTES));
+      }
+      pending = data.subarray(i);
+      if (pending.length > 0) flushTimer = setTimeout(flush, FLUSH_MS);
+    }
+    flush();
+  })().catch(() => {});
+
+  return {
+    flush,
+    async stop() {
+      try {
+        record.kill("SIGTERM");
+      } catch { /* already gone */ }
+      await record.status.catch(() => {});
+    },
+  };
+}
+
+/**
+ * Playback queue on top of a long-lived `pw-play`.
+ *
+ * On barge-in, emptying the queue is not enough: bytes already handed to
+ * pw-play would keep playing. So `interrupt()` kills the process and the next
+ * `write()` spawns a fresh one.
+ */
+export class Speaker {
+  /** PipeWire node to play into; the default sink when unset. */
+  #target?: string;
+  #proc: Deno.ChildProcess | null = null;
+  #writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
+  #queue: Uint8Array[] = [];
+  #pumping = false;
+  /** Bumped on every interruption to invalidate an in-flight write. */
+  #generation = 0;
+
+  constructor({ target }: { target?: string } = {}) {
+    this.#target = target;
+  }
+
+  write(chunk: Uint8Array): void {
+    this.#queue.push(chunk);
+    if (!this.#pumping) void this.#pump();
+  }
+
+  /** Drops everything pending and stops playback immediately. */
+  interrupt(): void {
+    this.#queue.length = 0;
+    this.#generation++;
+    this.#reset();
+  }
+
+  close(): void {
+    this.interrupt();
+  }
+
+  async #pump(): Promise<void> {
+    this.#pumping = true;
+    try {
+      while (this.#queue.length > 0) {
+        const generation = this.#generation;
+        this.#spawn();
+        const chunk = this.#queue.shift()!;
+        try {
+          await this.#writer!.write(chunk);
+        } catch {
+          // pw-play died (interrupted, or an error): drop it and carry on.
+          if (generation === this.#generation) this.#reset();
+        }
+      }
+    } finally {
+      this.#pumping = false;
+    }
+  }
+
+  #spawn(): void {
+    if (this.#proc) return;
+    this.#proc = new Deno.Command("pw-play", {
+      args: [
+        ...(this.#target ? ["--target", this.#target] : []),
+        "--rate", "24000",
+        "--channels", "1",
+        "--format", "s16",
+        "--latency", "40ms",
+        "--raw",
+        "-",
+      ],
+      stdin: "piped",
+      stdout: "null",
+      stderr: "null",
+    }).spawn();
+    this.#writer = this.#proc.stdin.getWriter();
+  }
+
+  #reset(): void {
+    const proc = this.#proc;
+    const writer = this.#writer;
+    this.#proc = null;
+    this.#writer = null;
+    try {
+      writer?.releaseLock();
+    } catch { /* a write was in flight */ }
+    try {
+      proc?.kill("SIGKILL");
+    } catch { /* already gone */ }
+    proc?.status.catch(() => {});
+  }
+}

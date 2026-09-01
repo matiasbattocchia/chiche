@@ -1,0 +1,5 @@
+[tools]
+deno = "2.7.14"
+
+[env]
+_.file = ".env"
