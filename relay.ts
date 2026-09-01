@@ -382,6 +382,12 @@ if (TEST) {
   try {
     mu = await connectMu(inject);
     status(`mu conectado · agente ${mu.agent}`);
+    // On an unasked-for hangup the handle is dead weight: dropping it makes `input`
+    // answer "mu no está conectado" honestly instead of acking sends that go nowhere.
+    // (mu.ts already injects the hangup itself, so the voice can say what happened.)
+    mu.hangup.then(() => {
+      mu = null;
+    });
   } catch (e) {
     status(`mu no respondió: ${e instanceof Error ? e.message : e}`);
   }

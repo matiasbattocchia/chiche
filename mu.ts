@@ -33,6 +33,8 @@ export type MuUpdate =
 export interface Mu {
   /** The agent this client fronts — mu's roster name, not ours. */
   readonly agent: string;
+  /** Resolves only on an unasked-for hangup; a close() of ours never fires it. */
+  readonly hangup: Promise<void>;
   /** Publishes one line. Resolves as soon as the door acks: mu's work comes back later. */
   send(text: string): Promise<{ ok: boolean; error?: string }>;
   close(): void;
@@ -79,14 +81,15 @@ export async function connectMu(onUpdate: (u: MuUpdate) => void): Promise<Mu> {
       }
       case "tool_use": {
         flushThinking();
-        onUpdate({ kind: "activity", text: describeCall(e.parts[0].data) });
+        const data = e.parts[0]?.data;
+        onUpdate({ kind: "activity", text: data ? describeCall(data) : "usó una herramienta" });
         return;
       }
       case "tool_result": {
         // A deferred outcome is the harness reporting on a call that outlived its turn.
         if (e.payload?.deferred) {
           onUpdate({ kind: "activity", text: outcomeLine(e, THINKING_MAX) });
-        } else if (e.parts[0].data.is_error) {
+        } else if (e.parts[0]?.data?.is_error) {
           onUpdate({ kind: "activity", text: "esa herramienta falló" });
         }
         return;
@@ -95,9 +98,10 @@ export async function connectMu(onUpdate: (u: MuUpdate) => void): Promise<Mu> {
         // Nothing here answers cards: this org runs allow-by-default. If one ever fires,
         // mu stalls — so it is surfaced, and the voice agent can at least say why.
         flushThinking();
+        const detail = e.parts[0]?.data?.detail ?? "(sin detalle)";
         onUpdate({
           kind: "activity",
-          text: `mu espera una aprobación que nadie puede dar: ${e.parts[0].data.detail}`,
+          text: `mu espera una aprobación que nadie puede dar: ${detail}`,
         });
         return;
       }
@@ -115,15 +119,21 @@ export async function connectMu(onUpdate: (u: MuUpdate) => void): Promise<Mu> {
   };
 
   const w = wire(conn, { event, delta });
-  // Closing the socket ends the pump too, so only an *unasked-for* hangup is news.
+  // Closing the socket ends the pump too, so only an *unasked-for* hangup is news; a
+  // clean leave resolves nothing, and the promise dies with the process.
   let leaving = false;
-  w.hangup.then(() => {
-    if (!leaving) onUpdate({ kind: "error", text: "mu colgó la conexión" });
+  const hangup = new Promise<void>((resolve) => {
+    w.hangup.then(() => {
+      if (leaving) return;
+      onUpdate({ kind: "error", text: "mu colgó la conexión" });
+      resolve();
+    });
   });
   await w.request({ op: "tail" }); // live: we want the present, not the log's past
 
   return {
     agent: a.target,
+    hangup,
     async send(text: string) {
       const r = await w.request({
         op: "message",
