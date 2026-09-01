@@ -57,6 +57,11 @@ the Live API session, whose resumption handle is persisted under `data/relay/` a
 reloaded on start — a restart resumes where it left off, falling back to a fresh
 conversation when the server no longer honors the saved handle.
 
+A parallel `mu repl` (any terminal, anywhere in the project) attaches to the same daemon:
+it paints the full transcript the voice flattens, and it steers — lines typed there enter
+the same conversation, and mu's replies to them are spoken by the voice too. It is also
+where an approval card can be answered if one ever fires.
+
 Requires `ANTHROPIC_API_KEY` in `.env` for mu, and `@mu/` in the import map pointing at a
 local mu checkout (standing in for the `@mu/core` JSR package it is not yet published as).
 mu's daemon is raised on demand and reaps itself ~30s after the REPL detaches.
