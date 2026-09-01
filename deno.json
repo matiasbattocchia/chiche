@@ -1,8 +1,14 @@
 {
   "nodeModulesDir": "auto",
   "imports": {
+    "@anthropic-ai/sdk": "npm:@anthropic-ai/sdk@^0.112.0",
     "@google/genai": "npm:@google/genai@^2.19.0/web",
-    "@std/encoding/base64": "jsr:@std/encoding@^1.0.10/base64"
+    "@mu/": "../new/src/",
+    "@std/encoding/base64": "jsr:@std/encoding@^1.0.10/base64",
+    "@std/encoding/base64url": "jsr:@std/encoding@^1/base64url",
+    "@std/jsonc": "jsr:@std/jsonc@^1",
+    "@std/streams": "jsr:@std/streams@^1",
+    "@std/yaml": "jsr:@std/yaml@^1"
   },
   "tasks": {
     "start": "deno run --allow-env --allow-net --allow-read --allow-sys --allow-run=pw-record,pw-play,pactl main.ts",

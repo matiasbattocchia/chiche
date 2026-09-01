@@ -1,0 +1,73 @@
+// config.jsonc — the org's declaration: every harness knob (the catalog, DESIGN §9).
+// Only the setup doors write it (`mu init` materializes it, `mu connect` declares the
+// connection it just earned) — git is its history, boot compiles it into the registry.
+// A key left out takes its default; an unknown key is a boot error.
+{
+  // harness machinery — every deployment works on the defaults
+  "system": {
+    // cap on stop() awaiting an in-flight turn
+    "stopTimeoutMs": 5000,
+    // a bash call's wall cap unless the model asks for another
+    "bashTimeoutMs": 120000,
+    // turn-lease TTL; an older lease is stolen (the crash signal)
+    "lockTtlMs": 120000,
+    // slow outer retries after the SDK's own fast ones
+    "retryDelaysMs": [5000,20000],
+    // est. tokens of raw event JSON (~1.8x the prompt) before a checkpoint runs
+    "compactAt": 50000,
+    // est. tokens a checkpoint leaves uncovered
+    "keepRecent": 20000,
+    // history query cap — the prompt's size guard
+    "windowLimit": 500,
+    // echo settle before the mirror's fan-in copies
+    "mirrorSettleMs": 1000,
+    // how far back an echo may claim an unclaimed CC
+    "mirrorClaimMs": 60000,
+    // how long a world message waits for the rest of its burst before a turn runs
+    "debounceMs": 5000
+  },
+  // this deployment's identity — the clock, the backlog, and every agent's defaults
+  "org": {
+    // the org's clock (IANA) — every rendered stamp, cron and sleep span reads it
+    "timezone": "America/Mendoza",
+    // parked until the i18n seam — render is English for now
+    "locale": null,
+    // backlog an agent inherits at boot; lower it to come up quietly
+    "backlogHours": 24,
+    // every agent's defaults — an agents.<name> entry re-declares these, key by key
+    "agent": {
+      // the model an agent runs on
+      "model": "claude-sonnet-5",
+      // reasoning effort (low|medium|high|xhigh|max); null ⇒ the model decides
+      "effort": null,
+      // output cap per model call
+      "maxTokens": 64000,
+      // model provider (the transport seam); null ⇒ Anthropic
+      "provider": null,
+      // the tools offered to the model, by name — built-ins and exec tools (bash, MCP) alike; null ⇒ every tool the deployment has. Add "send" where the agent has peers or a world to write to — a reply to its own principal is its plain answer, never a call
+      "tools": ["search","schedule","cancel","bash"],
+      // permission policy: first match decides (allow|ask|deny); * matches any tool; connection/conversation pin a rule to where a send lands
+      "rules": [{"tool":"send","action":"ask"},{"tool":"*","action":"allow"}],
+      // attention: a conversation stays hot this long after the agent's own last word
+      "engagedMinutes": 15,
+      // attention: an ambient pile this deep wakes the agent before the interval does
+      "digestAfterMessages": 25,
+      // attention: how often ambient conversations are looked at — the idle cadence
+      "digestMinutes": 15,
+      // attention: org-clock span "from-to" the ambient world waits out; null ⇒ never sleeps
+      "sleepHours": "23-8"
+    }
+  },
+  // media processors — broker-side commands that derive text from bytes (§5)
+  "processors": {
+    // shell command, audio bytes on stdin → transcript on stdout — e.g. "processors/qwen-asr/transcribe.sh" (root-relative; see its README); null ⇒ no transcription
+    "audio": null
+  },
+  // the roster: every key is an agent — overrides of org.agent, plus declared handles
+  "agents": {
+    "matias": {}
+  },
+  // the connectors' knobs — a subsection per connector, validated by its owner
+  "connections": {
+  }
+}
