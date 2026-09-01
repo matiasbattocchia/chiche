@@ -1,10 +1,8 @@
 /**
- * shell.ts — the parts of the voice REPLs that are the same program.
+ * shell.ts — the app's terminal shell, kept apart from the conversation logic.
  *
- * main.ts and relay.ts share a terminal shell: the ANSI helpers, the transcript state
- * machine, signal handling, and the audio rig (AEC → speaker + mic) with its one valid
- * teardown order. It lives here once so the two cannot drift apart — the PTT tail-flush
- * and the signal-exit fixes were each lost once to the fork.
+ * The ANSI helpers, the transcript state machine, signal handling, and the audio rig
+ * (AEC → speaker + mic) with its one valid teardown order.
  */
 
 import { type Aec, loadAec } from "./aec.ts";
