@@ -11,9 +11,6 @@
     "@std/yaml": "jsr:@std/yaml@^1"
   },
   "tasks": {
-    "start": "deno run --allow-env --allow-net --allow-read --allow-write=data --allow-sys --allow-run=pw-record,pw-play,pactl,deno main.ts",
-    "ptt": "deno task start --ptt",
-    "raw": "deno task start --no-aec",
-    "relay": "deno task start --mu"
+    "start": "deno run --allow-env --allow-net --allow-read --allow-write=data --allow-sys --allow-run=pw-record,pw-play,pactl,deno main.ts"
   }
 }

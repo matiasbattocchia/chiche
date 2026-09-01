@@ -17,15 +17,13 @@ mise trust && mise install
 ## Usage
 
 ```sh
-deno task start    # the voice alone, no tools — echo cancellation on, open mic
-deno task ptt      # push to talk (--ptt)
-deno task raw      # no echo cancellation (--no-aec; use headphones)
-deno task relay    # two agents: voice + mu (--mu)
+deno task start            # two agents: voice + mu — echo cancellation on, open mic
+deno task start --no-mu    # the voice alone, no tools — the audio test bench
+deno task start --ptt      # push to talk
+deno task start --no-aec   # no echo cancellation (use headphones)
 ```
 
-One app: `--mu` adds agent 2 and the `input` tool; without it the voice has no tools at
-all, which doubles as the test bench for the audio half. Flags combine (`deno task relay
---ptt`).
+One app, one task; flags combine. `--no-mu` leaves the voice with no tools at all.
 
 Keys: `m` mute · `space` interrupt the model · `q` quit.
 Under `--ptt`, space holds to talk — or toggles, if the terminal doesn't report
@@ -35,7 +33,7 @@ Echo cancellation loads PipeWire's `module-echo-cancel` for the run and unloads
 it on exit, leaving the audio graph as it found it. It binds to whatever the
 default sink is at startup, so switch devices *before* starting.
 
-## Two agents (`--mu`)
+## Two agents
 
 An experiment: the voice model interprets, [mu](../new) builds. They never hear each
 other verbatim.
@@ -67,7 +65,7 @@ mu's daemon is raised on demand and reaps itself ~30s after the REPL detaches.
 
 | file | |
 | --- | --- |
-| `main.ts` | the app: session, keybindings, reconnect loop; `--mu` adds the tool + injections |
+| `main.ts` | the app: session, keybindings, reconnect loop, the tool + injections |
 | `mu.ts` | mu attach client, flattened to activity / final / error |
 | `shell.ts` | terminal shell: transcript, signals, the audio rig |
 | `audio.ts` | `pw-record` capture and `pw-play` playback |

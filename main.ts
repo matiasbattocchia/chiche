@@ -1,11 +1,9 @@
 /**
- * main.ts — a voice on the Gemini Live API; with --mu, two agents and one microphone.
+ * main.ts — two agents, one microphone.
  *
  * Talk into the microphone and hear the reply, while both sides of the conversation are
- * transcribed live to the terminal. That is agent 1, and by default it is alone, with no
- * tools: a plain spoken assistant, which doubles as the test bench for the audio half.
- *
- * Under --mu, agent 2 joins: mu, the builder. They never hear each other verbatim. Agent 1
+ * transcribed live to the terminal. That is agent 1, the voice; by default agent 2 is
+ * raised beside it: mu, the builder. They never hear each other verbatim. Agent 1
  * decides what to ask for and says it in its own words through the `input` tool; mu's work
  * comes back and agent 1 decides what of it is worth saying out loud. Nothing is dictated
  * and nothing is read aloud — the point of the arrangement is the interpretation at both
@@ -31,7 +29,8 @@
  * `[mu]` envelope and the system instruction are what keep the harness distinct from the
  * human inside that one role.
  *
- *   --mu        raise agent 2 and offer the input tool; without it, no tools at all
+ *   --no-mu     agent 1 alone, with no tools at all: a plain spoken assistant, which
+ *               doubles as the test bench for the audio half
  *   --ptt       push to talk: no automatic VAD, you open and close the turn. The default
  *               is an open mic; --ptt spares the 25 tokens/second an open mic bills for
  *               silence, and narrows the race between your turn and the injected ones.
@@ -76,7 +75,7 @@ const MU_INSTRUCTION =
   "usuario le importa y dejá afuera el detalle técnico salvo que lo pida.\n\n" +
   "Si no entendés qué quiere el usuario, preguntale antes de molestar a mu.";
 
-const MU = Deno.args.includes("--mu");
+const MU = !Deno.args.includes("--no-mu");
 const PTT = Deno.args.includes("--ptt");
 const AEC = !Deno.args.includes("--no-aec");
 
@@ -110,7 +109,7 @@ let talking = false;
 let userSpeaking = false;
 
 /**
- * Under --mu each agent has ONE conversation, the way mu's log gives agent 2 one: the
+ * With mu along, each agent has ONE conversation, the way mu's log gives agent 2 one: the
  * resumption handle is persisted and reloaded, so a restart resumes rather than starting
  * over — and a tool response outliving its socket still lands in the same logical session.
  * Solo runs stay ephemeral.
