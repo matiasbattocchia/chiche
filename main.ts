@@ -297,7 +297,9 @@ function connect(): Promise<{ session: Session; closed: Promise<void> }> {
     model: MODEL,
     config: {
       responseModalities: [Modality.AUDIO],
-      systemInstruction: MU ? MU_INSTRUCTION : SOLO_INSTRUCTION,
+      // A bare string here breaks the session silently on the web build:
+      // setup completes but the server never answers anything after it.
+      systemInstruction: { parts: [{ text: MU ? MU_INSTRUCTION : SOLO_INSTRUCTION }] },
       speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE } } },
       thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
       inputAudioTranscription: {},
