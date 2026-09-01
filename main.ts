@@ -198,8 +198,38 @@ function relayInput(text: string): Record<string, unknown> {
 /** Whether the current connection said anything at all; a silent one means a bad resume. */
 let gotMessage = false;
 
+// The API sheds load silently: the connection opens, setup completes, and the
+// server then ignores every audio frame — no error, no close, no transcription.
+// Detected by pairing what we send with what comes back: once speech-level audio
+// has been streaming for a while with no server reaction, say so instead of
+// letting the user talk into a void.
+let loudMs = 0;
+let reacted = false;
+let deafWarned = false;
+
+const LOUD_RMS = 1000;
+const DEAF_AFTER_LOUD_MS = 3000;
+
+function watchForDeafSession(chunk: Uint8Array) {
+  if (reacted || deafWarned || chunk.byteOffset % 2 !== 0) return;
+  const samples = new Int16Array(chunk.buffer, chunk.byteOffset, chunk.byteLength >> 1);
+  let sum = 0;
+  let n = 0;
+  for (let i = 0; i < samples.length; i += 8, n++) sum += samples[i] * samples[i];
+  if (Math.sqrt(sum / n) < LOUD_RMS) return;
+  loudMs += chunk.byteLength / 32; // 16 kHz s16 mono: 32 bytes per ms
+  if (loudMs > DEAF_AFTER_LOUD_MS) {
+    deafWarned = true;
+    status(
+      "hay voz saliendo pero el servidor no reacciona — sesión sorda " +
+        "(la API descarta sesiones en silencio cuando pega su límite; esperá unos minutos)",
+    );
+  }
+}
+
 function handleMessage(message: LiveServerMessage) {
   gotMessage = true;
+  if (message.serverContent || message.toolCall) reacted = true;
   const resumption = message.sessionResumptionUpdate;
   if (resumption?.resumable && resumption.newHandle) saveHandle(resumption.newHandle);
 
@@ -390,6 +420,7 @@ const rig = await startAudio(AEC, (chunk) => {
   session.sendRealtimeInput({
     audio: { data: encodeBase64(chunk), mimeType: "audio/pcm;rate=16000" },
   });
+  watchForDeafSession(chunk);
 }, (error) => status(`sin cancelación de eco: ${error}`));
 
 onSignals(cleanup);
@@ -449,6 +480,9 @@ while (running) {
   if (PTT && talking) session.sendRealtimeInput({ activityStart: {} });
   while (backlog.length > 0) inject(backlog.shift()!);
   gotMessage = false;
+  loudMs = 0;
+  reacted = false;
+  deafWarned = false;
   await Promise.race([closed, keys]);
   session?.close();
   session = null;
