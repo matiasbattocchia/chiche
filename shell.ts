@@ -68,12 +68,11 @@ async function pactl(args: string[]): Promise<string | null> {
 
 interface PactlEndpoint {
   name: string;
-  description?: string;
   mute?: boolean;
   volume?: Record<string, { value_percent?: string }>;
 }
 
-/** `"Warm Microphone · 100%"`, flagging mutes and (for the mic) low volume. */
+/** `"<node name> · 100%"`, flagging mutes and (for the mic) low volume. */
 async function describeDefault(kind: "source" | "sink"): Promise<string | null> {
   const def = await pactl([`get-default-${kind}`]);
   if (!def) return null;
@@ -87,7 +86,7 @@ async function describeDefault(kind: "source" | "sink"): Promise<string | null> 
     .map((v) => parseInt(v.value_percent ?? "", 10))
     .filter((p) => !isNaN(p));
   const pct = percents.length ? Math.max(...percents) : null;
-  let line = `${node.description ?? def} · ${pct === null ? "¿?" : `${pct}%`}`;
+  let line = `${def} · ${pct === null ? "¿?" : `${pct}%`}`;
   if (node.mute) line += " · ¡SILENCIADO!";
   else if (kind === "source" && pct !== null && pct < 75) line += " · ¡volumen bajo!";
   return line;
@@ -96,8 +95,8 @@ async function describeDefault(kind: "source" | "sink"): Promise<string | null> 
 /**
  * Reports the default source and sink — the endpoints the whole audio path
  * (echo-cancel included) will bind to — with their volumes. WirePlumber
- * restores per-node volume and mute from stale state; a forgotten 40% on the
- * mic once cost a whole debugging session, so it's one status line now.
+ * restores per-node volume and mute from saved state, so a quiet or muted
+ * endpoint can predate the run and go unnoticed.
  */
 export async function preflight(status: (text: string) => void): Promise<void> {
   const [source, sink] = await Promise.all([
