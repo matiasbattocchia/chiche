@@ -51,6 +51,63 @@ export function transcript(labels: { user: string; model: string }): Transcript 
   };
 }
 
+// --- Preflight ---
+
+async function pactl(args: string[]): Promise<string | null> {
+  try {
+    const { success, stdout } = await new Deno.Command("pactl", {
+      args,
+      stdout: "piped",
+      stderr: "null",
+    }).output();
+    return success ? new TextDecoder().decode(stdout).trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+interface PactlEndpoint {
+  name: string;
+  description?: string;
+  mute?: boolean;
+  volume?: Record<string, { value_percent?: string }>;
+}
+
+/** `"Warm Microphone · 100%"`, flagging mutes and (for the mic) low volume. */
+async function describeDefault(kind: "source" | "sink"): Promise<string | null> {
+  const def = await pactl([`get-default-${kind}`]);
+  if (!def) return null;
+  const list = await pactl(["-f", "json", "list", `${kind}s`]);
+  let node: PactlEndpoint | undefined;
+  try {
+    node = (JSON.parse(list ?? "") as PactlEndpoint[]).find((n) => n.name === def);
+  } catch { /* fall through to the bare name */ }
+  if (!node) return def;
+  const percents = Object.values(node.volume ?? {})
+    .map((v) => parseInt(v.value_percent ?? "", 10))
+    .filter((p) => !isNaN(p));
+  const pct = percents.length ? Math.max(...percents) : null;
+  let line = `${node.description ?? def} · ${pct === null ? "¿?" : `${pct}%`}`;
+  if (node.mute) line += " · ¡SILENCIADO!";
+  else if (kind === "source" && pct !== null && pct < 75) line += " · ¡volumen bajo!";
+  return line;
+}
+
+/**
+ * Reports the default source and sink — the endpoints the whole audio path
+ * (echo-cancel included) will bind to — with their volumes. WirePlumber
+ * restores per-node volume and mute from stale state; a forgotten 40% on the
+ * mic once cost a whole debugging session, so it's one status line now.
+ */
+export async function preflight(status: (text: string) => void): Promise<void> {
+  const [source, sink] = await Promise.all([
+    describeDefault("source"),
+    describeDefault("sink"),
+  ]);
+  if (source) status(`mic: ${source}`);
+  if (sink) status(`salida: ${sink}`);
+}
+
 // --- Signals ---
 
 const SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;

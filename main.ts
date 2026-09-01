@@ -50,7 +50,7 @@ import {
 import { decodeBase64, encodeBase64 } from "@std/encoding/base64";
 import { holdSupported, readKeys, restoreKeyboard } from "./keys.ts";
 import { connectMu, type Mu, type MuUpdate } from "./mu.ts";
-import { dim, onSignals, out, startAudio, transcript } from "./shell.ts";
+import { dim, onSignals, out, preflight, startAudio, transcript } from "./shell.ts";
 
 const MODEL = "gemini-3.1-flash-live-preview";
 const VOICE = "Kore";
@@ -383,6 +383,7 @@ async function cleanup() {
 
 // --- Startup ---
 
+await preflight(status);
 const rig = await startAudio(AEC, (chunk) => {
   if (!session) return;
   if (PTT ? !talking : muted) return;
