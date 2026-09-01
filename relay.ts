@@ -10,10 +10,14 @@
  *
  * The channel between them is one tool and two kinds of injection:
  *
- *   input(text)         a plain BLOCKING tool that returns the moment mu's door acks.
- *                       Async function calling is not supported on this model — the docs
- *                       are explicit — so the call must never be left hanging. mu's actual
- *                       output is not the tool result; it arrives later, out of band.
+ *   input(text)         fire and forget: the tool is answered on the spot with a canned
+ *                       ack, and the send happens in the background. Async function
+ *                       calling is not supported on this model — the docs are explicit —
+ *                       so the call must never be left hanging; and inputs and outputs
+ *                       don't pair 1:1 anyway (lines sent while mu is busy steer it; one
+ *                       instruction can yield many messages), so nothing of mu's — not
+ *                       even a delivery failure — comes back as the tool result. All of
+ *                       it enters agent 1's context directly, out of band.
  *
  *   activity            `sendClientContent` with turnComplete:false — context accrues and
  *                       NOTHING is generated. Agent 1 learns mu is compiling, and stays
@@ -57,7 +61,8 @@ const SYSTEM_INSTRUCTION =
   "breves, sin listas ni markdown.\n\n" +
   "Cuando el usuario quiere que se haga algo, se lo pedís a mu con la herramienta input. " +
   "No repitas literalmente lo que dijo el usuario: entendé qué quiere y escribilo como una " +
-  "instrucción clara. input devuelve enseguida — es solo el acuse de mu, no su respuesta.\n\n" +
+  "instrucción clara. input devuelve enseguida y no es la respuesta de mu, que llega " +
+  "después. Mientras mu trabaja podés mandarle más instrucciones: lo van guiando.\n\n" +
   "Las líneas que empiezan con [mu] son el sistema contándote qué está pasando del otro " +
   "lado: nunca son el usuario hablando. Las que dicen 'trabajando' son para que sepas que " +
   "mu sigue ocupado; no las anuncies solas, usalas si el usuario pregunta por qué tarda. " +
@@ -85,11 +90,37 @@ const out = (s: string) => Deno.stdout.writeSync(encoder.encode(s));
 // --- Session state ---
 
 let session: Session | null = null;
-let resumptionHandle: string | undefined;
 let running = true;
 let muted = false;
 let talking = false;
 
+/**
+ * Agent 1 has ONE conversation, the way mu's log gives agent 2 one: the resumption
+ * handle is persisted and reloaded, so a restart resumes rather than starting over —
+ * and a tool response outliving its socket still lands in the same logical session.
+ */
+const HANDLE_FILE = "data/relay/handle";
+let resumptionHandle: string | undefined;
+try {
+  resumptionHandle = (await Deno.readTextFile(HANDLE_FILE)).trim() || undefined;
+} catch { /* first run */ }
+
+function saveHandle(handle: string) {
+  resumptionHandle = handle;
+  Deno.mkdir("data/relay", { recursive: true })
+    .then(() => Deno.writeTextFile(HANDLE_FILE, handle))
+    .catch(() => {});
+}
+
+async function dropHandle(reason: string) {
+  status(`${reason} — empiezo una conversación nueva`);
+  resumptionHandle = undefined;
+  await Deno.remove(HANDLE_FILE).catch(() => {});
+}
+
+// `let` with definite assignment: initialized once at startup, after the AEC
+// module load it depends on; a signal handler may read it before then.
+// deno-lint-ignore prefer-const
 let speaker!: Speaker;
 let mic: Mic | null = null;
 let aec: Aec | null = null;
@@ -142,18 +173,43 @@ function inject(update: MuUpdate) {
   });
 }
 
-async function relayInput(text: string): Promise<Record<string, unknown>> {
+/**
+ * One `input` call: ack the tool on the spot, fire the send, walk away.
+ *
+ * The tool response is protocol, not information — this model has no async function
+ * calling, so an unanswered call stalls the session, and inputs and outputs don't pair
+ * 1:1 anyway (follow-up lines steer a busy mu; one instruction can yield many messages).
+ * Everything real, delivery failure included, travels the injection channel.
+ */
+function relayInput(text: string): Record<string, unknown> {
   if (TEST) return { error: "modo prueba: mu no está corriendo, nada se ejecutó" };
   if (!mu) return { error: "mu no está conectado" };
-  const r = await mu.send(text);
-  return r.ok ? { output: "recibido por mu" } : { error: r.error ?? "la puerta lo rechazó" };
+  if (!text) return { error: "faltó el texto de la instrucción" };
+  mu.send(text).then(
+    (r) => {
+      if (!r.ok) {
+        inject({ kind: "error", text: `la puerta rechazó la instrucción: ${r.error ?? "sin motivo"}` });
+      }
+    },
+    (e) => {
+      inject({
+        kind: "error",
+        text: `no pude entregarle la instrucción a mu: ${e instanceof Error ? e.message : e}`,
+      });
+    },
+  );
+  return { output: "enviado a mu" };
 }
 
 // --- Server messages ---
 
+/** Whether the current connection said anything at all; a silent one means a bad resume. */
+let gotMessage = false;
+
 function handleMessage(message: LiveServerMessage) {
+  gotMessage = true;
   const resumption = message.sessionResumptionUpdate;
-  if (resumption?.resumable && resumption.newHandle) resumptionHandle = resumption.newHandle;
+  if (resumption?.resumable && resumption.newHandle) saveHandle(resumption.newHandle);
 
   if (message.goAway) {
     status(`la conexión cierra en ${message.goAway.timeLeft ?? "instantes"}, reconectando…`);
@@ -161,11 +217,9 @@ function handleMessage(message: LiveServerMessage) {
 
   for (const call of message.toolCall?.functionCalls ?? []) {
     const text = String((call.args as { text?: unknown })?.text ?? "");
-    // Answer even a malformed call: an unanswered one stalls the model on this API.
-    relayInput(text).then((response) => {
-      session?.sendToolResponse({
-        functionResponses: [{ id: call.id, name: call.name, response }],
-      });
+    // Answer even a malformed call, and synchronously: an unanswered one stalls the model.
+    session?.sendToolResponse({
+      functionResponses: [{ id: call.id, name: call.name, response: relayInput(text) }],
     });
   }
 
@@ -188,12 +242,14 @@ function handleMessage(message: LiveServerMessage) {
 
 function setTalking(on: boolean) {
   if (!PTT || on === talking || !session) return;
-  talking = on;
   if (on) {
+    talking = true;
     speaker.interrupt(); // talking over the model is a barge-in
     session.sendRealtimeInput({ activityStart: {} });
   } else {
-    mic?.flush(); // the tail of the last word is still buffered
+    // Flush the buffered tail while `talking` still lets it through the mic guard.
+    mic?.flush();
+    talking = false;
     session.sendRealtimeInput({ activityEnd: {} });
   }
 }
@@ -226,8 +282,9 @@ function connect(): Promise<{ session: Session; closed: Promise<void> }> {
         functionDeclarations: [{
           name: "input",
           description:
-            "Le pasa una instrucción a mu, el agente que construye. Devuelve enseguida, " +
-            "con el acuse de mu — su respuesta llega después, por su cuenta.",
+            "Le manda una instrucción a mu, el agente que construye. Devuelve enseguida y " +
+            "su resultado no dice nada de mu: lo que mu haga llega después, por su cuenta. " +
+            "Si mu está ocupado, más llamadas a input lo van guiando.",
           parameters: {
             type: Type.OBJECT,
             properties: {
@@ -290,10 +347,11 @@ async function cleanup() {
   if (Deno.stdin.isTerminal()) Deno.stdin.setRaw(false);
 }
 
-for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
-  Deno.addSignalListener(signal, async () => {
+const SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
+for (const [signal, num] of Object.entries(SIGNALS)) {
+  Deno.addSignalListener(signal as keyof typeof SIGNALS, async () => {
     await cleanup();
-    Deno.exit(130);
+    Deno.exit(128 + num);
   });
 }
 
@@ -348,16 +406,27 @@ while (running) {
   try {
     ({ session, closed } = await connect());
   } catch (e) {
+    // A handle the server no longer honors must not wedge the loop: retry fresh once.
+    if (resumptionHandle) {
+      await dropHandle("no pude retomar la conversación guardada");
+      continue;
+    }
     status(`no pude conectar: ${e instanceof Error ? e.message : e}`);
     break;
   }
-  status(resumptionHandle ? "sesión retomada" : "conectado — hablá");
+  status(resumptionHandle ? "conversación retomada" : "conectado — hablá");
   if (PTT && talking) session.sendRealtimeInput({ activityStart: {} });
   while (backlog.length > 0) inject(backlog.shift()!);
+  gotMessage = false;
   await Promise.race([closed, keys]);
   session?.close();
   session = null;
   speaker.interrupt();
+  // A resume the server accepts at the socket but hangs up on without a word is the
+  // other face of a stale handle; keeping it would reconnect into the same hangup.
+  if (running && resumptionHandle && !gotMessage) {
+    await dropHandle("la conversación guardada ya no sirve");
+  }
 }
 
 await cleanup();

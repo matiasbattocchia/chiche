@@ -46,10 +46,18 @@ thinking, failures — as context that generates nothing, so agent 1 knows the b
 still running without narrating it; mu's final answer arrives with `turnComplete:true`,
 which is what makes it speak, in its own words rather than reading the transcript out.
 
-The tool is deliberately blocking and answers immediately with mu's door ack: async
-function calling is not supported on this model, so a call left hanging stalls the
-session. Push to talk is the default here — an open mic bills 25 tokens/second of
+The tool is fire and forget: it answers on the spot with a canned ack (async function
+calling is not supported on this model, and a call left hanging stalls the session) and
+the send happens in the background. Inputs and outputs don't pair 1:1 — lines sent while
+mu is busy steer it, one instruction can yield many messages — so nothing of mu's, not
+even a delivery failure, travels as a tool result; it all enters agent 1's context as
+injected turns. Push to talk is the default here — an open mic bills 25 tokens/second of
 silence, and it would race the injected turns.
+
+Each agent has one conversation, not one per run. mu's is its log; the voice model's is
+the Live API session, whose resumption handle is persisted under `data/relay/` and
+reloaded on start — a restart resumes where it left off, falling back to a fresh
+conversation when the server no longer honors the saved handle.
 
 Requires `ANTHROPIC_API_KEY` in `.env` for mu, and `@mu/` in the import map pointing at a
 local mu checkout (standing in for the `@mu/core` JSR package it is not yet published as).
