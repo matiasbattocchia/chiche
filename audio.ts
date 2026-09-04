@@ -50,7 +50,7 @@ export function startMic(
 
   /** Partial frame carried over between reads; fresh per capture session. */
   let pending = new Uint8Array(0);
-  let flushTimer: number | undefined;
+  let flushTimer: ReturnType<typeof setTimeout> | undefined;
 
   // A throwing consumer must not unwind the read loop or a timer, or the mic
   // goes silent for the rest of the run.
@@ -126,7 +126,7 @@ export class Speaker {
   #writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   #queue: Uint8Array[] = [];
   #pumping = false;
-  #keepalive: number | undefined;
+  #keepalive: ReturnType<typeof setInterval> | undefined;
   /** Bumped on every interruption to invalidate an in-flight write. */
   #generation = 0;
   /** When the audio handed over so far runs out, by its byte count (24 kHz s16). */
