@@ -99,6 +99,12 @@ that latency is the API's.
 
 ## Notes
 
+- The echo-cancelled source needs a graph quantum of at least ~1024 frames on this
+  machine: at smaller quanta `module-echo-cancel` (WebRTC) runs out of playback
+  buffers and drops about half the capture once any audio has played through its
+  sink. The metrics summary line (`mic entregó Xs en Ys`) catches it; the fix is
+  `default.clock.min-quantum = 1024` in a `pipewire.conf.d` drop-in.
+
 - Audio is mono PCM s16le: 16 kHz in, 24 kHz out.
 - The import map points at the SDK's **web** build. The Node build goes through
   npm `ws` on Deno's Node TLS shim, which panics on teardown.

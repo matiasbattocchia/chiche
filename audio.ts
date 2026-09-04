@@ -5,14 +5,8 @@
  * resampling to and from the hardware's native 48 kHz.
  */
 
-/**
- * 160 ms at 16 kHz mono s16. The docs suggest 40 ms chunks, but at 25 messages/s the
- * SDK's send path eventually drags the whole event loop to half speed and the mic
- * starts losing samples (measured: delivery falls to ~50-75% of realtime, onset
- * 20-60 s in); at a quarter of the rate it holds 100%. The extra buffering is small
- * against the server's own response latencies.
- */
-const FRAME_BYTES = 5120;
+/** 40 ms at 16 kHz mono s16 = 1280 bytes, the chunk size the docs recommend. */
+const FRAME_BYTES = 1280;
 
 /**
  * How long a partial frame may sit before being sent anyway. The pipe delivers
