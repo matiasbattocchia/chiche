@@ -103,6 +103,9 @@ export function openMetrics(path: string): Metrics {
   const sibling = (name: string) => (dir ? `${dir}/` : "") + name;
   const micWav = new WavWriter(sibling("mic.wav"), 16000);
   const vozWav = new WavWriter(sibling("voz.wav"), 24000);
+  /** Wall-clock time of the last playback chunk; a real pause after it starts a new reply. */
+  let lastPlaybackAt: number | null = null;
+  const PLAYBACK_GAP_S = 0.2;
 
   // Current window.
   let sumSq = 0;
@@ -163,11 +166,19 @@ export function openMetrics(path: string): Metrics {
       if (windowBytes >= WINDOW_MS * BYTES_PER_MS) flush();
     },
     playback(chunk) {
-      // Chunks arrive in bursts ahead of playback: place each at its arrival time or
-      // right after the previous one, whichever is later — where the speaker plays it.
-      const arrival = Math.floor(now() * vozWav.rate);
-      vozWav.silence(arrival - vozWav.position);
+      // A reply's chunks arrive faster than realtime, so wall-clock arrival can't place
+      // them — near the end they trickle at realtime and any per-chunk rounding inserts
+      // silence slivers, which read as clicks. Instead keep a reply contiguous and only
+      // open a gap when arrivals actually pause (a new reply), sized to that real gap.
+      const t = now();
+      if (lastPlaybackAt !== null) {
+        const gap = t - lastPlaybackAt;
+        if (gap > PLAYBACK_GAP_S) vozWav.silence(Math.round(gap * vozWav.rate));
+      } else {
+        vozWav.silence(Math.round(t * vozWav.rate));
+      }
       vozWav.write(chunk);
+      lastPlaybackAt = t;
     },
     event(text) {
       line(text);

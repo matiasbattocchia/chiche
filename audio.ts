@@ -63,9 +63,14 @@ export function startMic(
   const flush = () => {
     clearTimeout(flushTimer);
     flushTimer = undefined;
-    if (pending.length === 0) return;
-    const tail = pending;
-    pending = new Uint8Array(0);
+    // Emit whole samples only. A read can end on an odd byte, and an odd-length chunk
+    // shifts every following sample the server concatenates by one byte — the audio
+    // turns to noise until the next odd chunk happens to realign it. Hold the stray
+    // byte back for the next read to complete the sample.
+    const even = pending.length - (pending.length % 2);
+    if (even === 0) return;
+    const tail = pending.subarray(0, even);
+    pending = pending.subarray(even);
     emit(tail);
   };
 
