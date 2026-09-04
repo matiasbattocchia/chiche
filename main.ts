@@ -463,7 +463,8 @@ async function cleanup() {
   cleanedUp = true;
   mu?.close(); // detaching is what ends mu: its daemon reaps itself a linger later
   await rig.stop();
-  metrics.close();
+  out(dim(`· ${metrics.close()}
+`));
   restoreKeyboard();
   if (Deno.stdin.isTerminal()) Deno.stdin.setRaw(false);
 }

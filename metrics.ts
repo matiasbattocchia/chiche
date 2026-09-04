@@ -37,7 +37,8 @@ export interface Metrics {
   event(text: string): void;
   /** Seconds since the mic last rose clearly above the noise floor; null if never. */
   sinceLoud(): number | null;
-  close(): void;
+  /** One-line delivery summary (mic audio seconds vs wall seconds), for the terminal. */
+  close(): string;
 }
 
 const dbfs = (rms: number) => rms > 0 ? 20 * Math.log10(rms / 32768) : -Infinity;
@@ -118,6 +119,10 @@ export function openMetrics(path: string): Metrics {
 
   const history: number[] = [];
   let lastLoudAt: number | null = null;
+  /** Wall-clock start of the current window, to catch the mic falling behind. */
+  let windowStartedAt: number | null = null;
+  let micAudioMs = 0;
+  let firstFrameAt: number | null = null;
 
   const flush = () => {
     const rms = count ? Math.sqrt(sumSq / count) : 0;
@@ -131,12 +136,20 @@ export function openMetrics(path: string): Metrics {
 
     const fill = Math.round(Math.max(0, Math.min(1, (level - BAR_MIN_DB) / -BAR_MIN_DB)) * BAR_WIDTH);
     const bar = "▮".repeat(fill).padEnd(BAR_WIDTH);
+    // 250 ms of audio should take 250 ms of wall clock; taking notably longer means
+    // the capture path is dropping samples — the audio reaching the server is
+    // time-compressed, and no downstream tuning can fix that.
+    const took = windowStartedAt === null ? null : now() - windowStartedAt;
+    const slow = took !== null && took > (WINDOW_MS / 1000) * 1.4
+      ? `  ¡atraso ×${(took / (WINDOW_MS / 1000)).toFixed(1)}!`
+      : "";
     const flags = [
       loud ? "voz" : "   ",
       anyPlaying ? "reproduciendo" : "             ",
       anyWithheld && !anySent ? "silenciado" : anyWithheld ? "parcial" : "",
     ].join(" ");
-    line(`mic ${fmtDb(level)} dBFS  pico ${fmtDb(peakDb)}  piso ${fmtDb(floor)}  ${bar} ${flags}`.trimEnd());
+    line(`mic ${fmtDb(level)} dBFS  pico ${fmtDb(peakDb)}  piso ${fmtDb(floor)}  ${bar} ${flags}`.trimEnd() + slow);
+    windowStartedAt = null;
 
     sumSq = 0;
     count = 0;
@@ -147,6 +160,9 @@ export function openMetrics(path: string): Metrics {
 
   return {
     frame(chunk, sent, playing) {
+      windowStartedAt ??= now();
+      firstFrameAt ??= now();
+      micAudioMs += chunk.byteLength / BYTES_PER_MS;
       if (sent) micWav.write(chunk);
       else micWav.silence(chunk.byteLength >> 1);
       if (chunk.byteOffset % 2 === 0) {
@@ -188,9 +204,16 @@ export function openMetrics(path: string): Metrics {
     },
     close() {
       if (count > 0) flush();
+      const wall = firstFrameAt === null ? 0 : now() - firstFrameAt;
+      const audio = micAudioMs / 1000;
+      const pct = wall > 0 ? Math.round(audio / wall * 100) : 100;
+      const summary = `mic entregó ${audio.toFixed(1)}s de audio en ${wall.toFixed(1)}s (${pct}%)` +
+        (pct < 90 ? " — capturas perdidas: el servidor oyó el audio comprimido en el tiempo" : "");
+      line(`· ${summary}`);
       file.close();
       micWav.close();
       vozWav.close();
+      return summary;
     },
   };
 }
