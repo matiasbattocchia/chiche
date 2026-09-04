@@ -99,12 +99,20 @@ export function startMic(
   };
 }
 
+/** 40 ms at 24 kHz s16 mono; what the idle stream is fed. */
+const KEEPALIVE_MS = 40;
+const KEEPALIVE_BYTES = KEEPALIVE_MS * 48;
+
 /**
- * Playback queue on top of a long-lived `pw-play`.
+ * Playback queue on top of an always-running `pw-play`.
+ *
+ * The stream is never left starving: while there is nothing to play it is fed
+ * silence, so the sink never suspends and the stream never underruns between
+ * turns — both of which crackle through the first moments of the next reply.
  *
  * On barge-in, emptying the queue is not enough: bytes already handed to
- * pw-play would keep playing. So `interrupt()` kills the process and the next
- * `write()` spawns a fresh one.
+ * pw-play would keep playing. So `interrupt()` kills the process and starts a
+ * fresh one, primed with silence, ready for the next reply.
  */
 export class Speaker {
   /** PipeWire node to play into; the default sink when unset. */
@@ -113,6 +121,7 @@ export class Speaker {
   #writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
   #queue: Uint8Array[] = [];
   #pumping = false;
+  #keepalive: number | undefined;
   /** Bumped on every interruption to invalidate an in-flight write. */
   #generation = 0;
   /** When the audio handed over so far runs out, by its byte count (24 kHz s16). */
@@ -120,11 +129,13 @@ export class Speaker {
 
   constructor({ target }: { target?: string } = {}) {
     this.#target = target;
+    this.#spawn();
   }
 
   write(chunk: Uint8Array): void {
     const now = performance.now();
     this.#playUntil = Math.max(now, this.#playUntil) + chunk.length / 48;
+    this.#stopKeepalive();
     this.#queue.push(chunk);
     if (!this.#pumping) void this.#pump();
   }
@@ -140,10 +151,14 @@ export class Speaker {
     this.#generation++;
     this.#playUntil = 0;
     this.#reset();
+    this.#spawn();
   }
 
   close(): void {
-    this.interrupt();
+    this.#queue.length = 0;
+    this.#generation++;
+    this.#playUntil = 0;
+    this.#reset();
   }
 
   async #pump(): Promise<void> {
@@ -162,7 +177,21 @@ export class Speaker {
       }
     } finally {
       this.#pumping = false;
+      this.#startKeepalive();
     }
+  }
+
+  #startKeepalive(): void {
+    if (this.#keepalive !== undefined) return;
+    this.#keepalive = setInterval(() => {
+      if (this.#pumping || this.#queue.length > 0 || !this.#writer) return;
+      this.#writer.write(new Uint8Array(KEEPALIVE_BYTES)).catch(() => {});
+    }, KEEPALIVE_MS);
+  }
+
+  #stopKeepalive(): void {
+    clearInterval(this.#keepalive);
+    this.#keepalive = undefined;
   }
 
   #spawn(): void {
@@ -182,9 +211,11 @@ export class Speaker {
       stderr: "null",
     }).spawn();
     this.#writer = this.#proc.stdin.getWriter();
+    this.#startKeepalive();
   }
 
   #reset(): void {
+    this.#stopKeepalive();
     const proc = this.#proc;
     const writer = this.#writer;
     this.#proc = null;

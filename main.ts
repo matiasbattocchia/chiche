@@ -285,6 +285,7 @@ function handleMessage(message: LiveServerMessage) {
       if (part.inlineData?.data) {
         const audio = decodeBase64(part.inlineData.data);
         rig.speaker.write(audio);
+        metrics.playback(audio);
         metrics.event(`srv audio ${(audio.length / 48).toFixed(0)}ms`);
       }
     }
@@ -463,7 +464,7 @@ async function cleanup() {
 // --- Startup ---
 
 await preflight(status);
-status(`métricas de audio → ${METRICS_FILE}`);
+status(`métricas → ${METRICS_FILE} · grabación → data/mic.wav, data/voz.wav`);
 const rig = await startAudio(AEC, (chunk) => {
   const sent = session !== null && !(PTT ? !talking : muted);
   metrics.frame(chunk, sent, rig.speaker.playing);

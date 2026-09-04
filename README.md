@@ -86,6 +86,12 @@ server event — transcriptions, audio, `interrupted`, turn boundaries — plus 
 and connection status. The terminal's `[speech end · respuesta +1.4s]` marker is the
 gap between your last loud window and the model's first word.
 
+Two recordings sit beside the log on the same clock: `data/mic.wav` is exactly what
+was sent to the API (16 kHz, after the mic chain and echo cancellation, silence where
+the mic was muted) and `data/voz.wav` is the model's audio as it arrived (24 kHz). A
+transcript that reads nothing like what you said gets settled by ear — seek to the
+log's timestamp.
+
 To tell the two suspects apart: if the `voz` flag keeps firing after you stop talking,
 the room (or the mic chain) never goes quiet and the server's VAD is right to wait —
 fix the audio path. If the level drops to the floor and the server still sits on it,
