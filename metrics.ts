@@ -14,8 +14,13 @@ const WINDOW_MS = 250;
 const BYTES_PER_MS = 32;
 /** Windows kept to estimate the noise floor: the quietest of the last 10 s. */
 const FLOOR_WINDOWS = 40;
-/** A window this far above the floor counts as voice (or something as loud). */
+/**
+ * A window counts as voice when it clears both: this far above the floor, and an
+ * absolute level — noise suppression can push the floor so low that breathing clears
+ * the relative test alone.
+ */
 const LOUD_ABOVE_FLOOR_DB = 12;
+const LOUD_MIN_DB = -45;
 
 const BAR_MIN_DB = -60;
 const BAR_WIDTH = 30;
@@ -60,7 +65,7 @@ export function openMetrics(path: string): Metrics {
     history.push(level);
     if (history.length > FLOOR_WINDOWS) history.shift();
     const floor = Math.min(...history);
-    const loud = level > floor + LOUD_ABOVE_FLOOR_DB;
+    const loud = level > floor + LOUD_ABOVE_FLOOR_DB && level > LOUD_MIN_DB;
     if (loud) lastLoudAt = now();
 
     const fill = Math.round(Math.max(0, Math.min(1, (level - BAR_MIN_DB) / -BAR_MIN_DB)) * BAR_WIDTH);
