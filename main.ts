@@ -55,6 +55,12 @@ import { dim, onSignals, out, preflight, startAudio, transcript } from "./shell.
 
 const MODEL = "gemini-3.1-flash-live-preview";
 const VOICE = "Kore";
+/**
+ * Silence the server's VAD waits for before committing the end of your turn. The
+ * default is close to 2 s; this sits above a natural mid-sentence pause and leaves
+ * the reply's first word around 1.5 s after you stop, generation included.
+ */
+const VAD_SILENCE_MS = 700;
 
 const SOLO_INSTRUCTION =
   "Sos un asistente conversacional por voz. Hablá siempre en español, con un tono cercano " +
@@ -398,7 +404,11 @@ function connect(): Promise<{ session: Session; closed: Promise<void> }> {
           }],
         }
         : {}),
-      ...(PTT ? { realtimeInputConfig: { automaticActivityDetection: { disabled: true } } } : {}),
+      realtimeInputConfig: {
+        automaticActivityDetection: PTT
+          ? { disabled: true }
+          : { silenceDurationMs: VAD_SILENCE_MS },
+      },
     },
     callbacks: {
       onmessage: handleMessage,
