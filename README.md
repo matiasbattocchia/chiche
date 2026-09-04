@@ -72,10 +72,24 @@ mu's daemon is raised on demand and reaps itself ~30s after the REPL detaches.
 | --- | --- |
 | `main.ts` | the app: session, keybindings, reconnect loop, the tool + injections |
 | `mu.ts` | mu attach client, flattened to activity / final / error |
+| `metrics.ts` | the audio timeline (`data/audio.log`): mic level vs. server events |
 | `shell.ts` | terminal shell: transcript, signals, the audio rig |
 | `audio.ts` | `pw-record` capture and `pw-play` playback |
 | `aec.ts` | echo-cancel module lifecycle |
 | `keys.ts` | stdin reader, kitty keyboard protocol for key releases |
+
+## Debugging endpointing
+
+Every run rewrites `data/audio.log`: the mic level per 250 ms window (dBFS, peak, a
+running noise floor, a bar, and whether the speaker was playing) interleaved with every
+server event — transcriptions, audio, `interrupted`, turn boundaries — plus key presses
+and connection status. The terminal's `[speech end · respuesta +1.4s]` marker is the
+gap between your last loud window and the model's first word.
+
+To tell the two suspects apart: if the `voz` flag keeps firing after you stop talking,
+the room (or the mic chain) never goes quiet and the server's VAD is right to wait —
+fix the audio path. If the level drops to the floor and the server still sits on it,
+that latency is the API's.
 
 ## Notes
 

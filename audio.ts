@@ -115,20 +115,30 @@ export class Speaker {
   #pumping = false;
   /** Bumped on every interruption to invalidate an in-flight write. */
   #generation = 0;
+  /** When the audio handed over so far runs out, by its byte count (24 kHz s16). */
+  #playUntil = 0;
 
   constructor({ target }: { target?: string } = {}) {
     this.#target = target;
   }
 
   write(chunk: Uint8Array): void {
+    const now = performance.now();
+    this.#playUntil = Math.max(now, this.#playUntil) + chunk.length / 48;
     this.#queue.push(chunk);
     if (!this.#pumping) void this.#pump();
+  }
+
+  /** Whether sound should be coming out right now — what the mic may pick up. */
+  get playing(): boolean {
+    return performance.now() < this.#playUntil;
   }
 
   /** Drops everything pending and stops playback immediately. */
   interrupt(): void {
     this.#queue.length = 0;
     this.#generation++;
+    this.#playUntil = 0;
     this.#reset();
   }
 

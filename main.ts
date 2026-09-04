@@ -50,6 +50,7 @@ import {
 import { decodeBase64, encodeBase64 } from "@std/encoding/base64";
 import { holdSupported, readKeys, restoreKeyboard } from "./keys.ts";
 import { connectMu, type Mu, type MuUpdate } from "./mu.ts";
+import { openMetrics } from "./metrics.ts";
 import { dim, onSignals, out, preflight, startAudio, transcript } from "./shell.ts";
 
 const MODEL = "gemini-3.1-flash-live-preview";
@@ -92,7 +93,12 @@ const KEY_Q = 113;
 const KEY_C = 99;
 
 const t = transcript({ user: "vos  › ", model: "voz › " });
-const { transcribe, status } = t;
+const { transcribe } = t;
+/** Status lines also go to the metrics log, so connects and reconnects sit on the timeline. */
+function status(text: string) {
+  metrics.event(`· ${text}`);
+  t.status(text);
+}
 
 function vadEvent(text: string) {
   if (SHOW_VAD_EVENTS) t.vadEvent(text);
@@ -115,6 +121,9 @@ let userSpeaking = false;
  * Solo runs stay ephemeral.
  */
 const HANDLE_FILE = "data/relay/handle";
+/** Rewritten every run: the mic timeline against the server's events. */
+const METRICS_FILE = "data/audio.log";
+const metrics = openMetrics(METRICS_FILE);
 let resumptionHandle: string | undefined;
 if (MU) {
   try {
@@ -253,18 +262,24 @@ function handleMessage(message: LiveServerMessage) {
   const interrupted = content.interrupted === true;
   if (interrupted) {
     rig.speaker.interrupt();
+    metrics.event("srv interrupted");
     if (!PTT) {
       vadEvent("speech detected · barge-in");
       userSpeaking = true;
     }
   } else {
     for (const part of content.modelTurn?.parts ?? []) {
-      if (part.inlineData?.data) rig.speaker.write(decodeBase64(part.inlineData.data));
+      if (part.inlineData?.data) {
+        const audio = decodeBase64(part.inlineData.data);
+        rig.speaker.write(audio);
+        metrics.event(`srv audio ${(audio.length / 48).toFixed(0)}ms`);
+      }
     }
   }
 
   const inputText = content.inputTranscription?.text ?? content.interimInputTranscription?.text;
   if (inputText) {
+    metrics.event(`srv input ${JSON.stringify(inputText)}`);
     // Under --ptt we already printed an exact start marker on the keypress.
     if (!userSpeaking && !PTT) {
       vadEvent("speech start");
@@ -274,18 +289,31 @@ function handleMessage(message: LiveServerMessage) {
   }
 
   if (content.outputTranscription?.text) {
+    metrics.event(`srv output ${JSON.stringify(content.outputTranscription.text)}`);
     if (userSpeaking && !PTT) {
-      vadEvent("speech end");
+      // The gap between your last loud window and the model's first word: the
+      // endpointing latency as you experience it.
+      vadEvent(`speech end${sinceLoud(" · respuesta ")}`);
       userSpeaking = false;
     }
     transcribe("model", content.outputTranscription.text);
   }
 
-  if (content.generationComplete) vadEvent("generation complete");
+  if (content.generationComplete) {
+    metrics.event("srv generation complete");
+    vadEvent("generation complete");
+  }
   if (content.turnComplete) {
+    metrics.event("srv turn complete");
     vadEvent("turn complete");
     if (!PTT) userSpeaking = false;
   }
+}
+
+/** `" · respuesta +1.9s"`: time since the mic was last loud, or nothing if it never was. */
+function sinceLoud(label: string): string {
+  const s = metrics.sinceLoud();
+  return s === null ? "" : `${label}+${s.toFixed(1)}s`;
 }
 
 // --- Push to talk ---
@@ -300,12 +328,14 @@ function setTalking(on: boolean) {
     talking = true;
     rig.speaker.interrupt(); // talking over the model is a barge-in
     session.sendRealtimeInput({ activityStart: {} });
+    metrics.event("ptt activity start");
     vadEvent("activity start");
   } else {
     // Flush the buffered tail while `talking` still lets it through the mic guard.
     rig.mic.flush();
     talking = false;
     session.sendRealtimeInput({ activityEnd: {} });
+    metrics.event("ptt activity end");
     vadEvent("activity end");
   }
 }
@@ -392,6 +422,7 @@ function onKey(event: { code: number; ctrl: boolean; type: string }): boolean | 
   if (!pressed) return;
   if (event.code === KEY_M) {
     muted = !muted;
+    metrics.event(muted ? "tecla mute" : "tecla unmute");
     status(muted ? "micrófono en silencio" : "micrófono abierto");
   } else if (event.code === KEY_SPACE) {
     rig.speaker.interrupt();
@@ -407,6 +438,7 @@ async function cleanup() {
   cleanedUp = true;
   mu?.close(); // detaching is what ends mu: its daemon reaps itself a linger later
   await rig.stop();
+  metrics.close();
   restoreKeyboard();
   if (Deno.stdin.isTerminal()) Deno.stdin.setRaw(false);
 }
@@ -414,10 +446,12 @@ async function cleanup() {
 // --- Startup ---
 
 await preflight(status);
+status(`métricas de audio → ${METRICS_FILE}`);
 const rig = await startAudio(AEC, (chunk) => {
-  if (!session) return;
-  if (PTT ? !talking : muted) return;
-  session.sendRealtimeInput({
+  const sent = session !== null && !(PTT ? !talking : muted);
+  metrics.frame(chunk, sent, rig.speaker.playing);
+  if (!sent) return;
+  session!.sendRealtimeInput({
     audio: { data: encodeBase64(chunk), mimeType: "audio/pcm;rate=16000" },
   });
   watchForDeafSession(chunk);
