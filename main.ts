@@ -55,6 +55,7 @@ import { dim, onSignals, out, preflight, startAudio, transcript } from "./shell.
 
 const MODEL = "gemini-3.1-flash-live-preview";
 const VOICE = "Kore";
+const LANGUAGE = "es-AR";
 /**
  * Silence the server's VAD waits for before committing the end of your turn. The
  * default is close to 2 s; this sits above a natural mid-sentence pause and leaves
@@ -374,7 +375,13 @@ function connect(): Promise<{ session: Session; closed: Promise<void> }> {
       // A bare string here breaks the session silently on the web build:
       // setup completes but the server never answers anything after it.
       systemInstruction: { parts: [{ text: MU ? MU_INSTRUCTION : SOLO_INSTRUCTION }] },
-      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE } } },
+      speechConfig: {
+        voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE } },
+        // The input transcription guesses a language per utterance and drifts; the
+        // model itself listens to the audio, so a wrong guess is cosmetic — this hint
+        // is the one lever the API offers to steady it.
+        languageCode: LANGUAGE,
+      },
       thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
       inputAudioTranscription: {},
       outputAudioTranscription: {},

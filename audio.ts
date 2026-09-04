@@ -184,7 +184,10 @@ export class Speaker {
   #startKeepalive(): void {
     if (this.#keepalive !== undefined) return;
     this.#keepalive = setInterval(() => {
-      if (this.#pumping || this.#queue.length > 0 || !this.#writer) return;
+      // An empty queue is not an idle stream: audio arrives in bursts ahead of
+      // playback and sits in the pipe, and silence appended behind it would land
+      // mid-phrase. Only feed the stream once everything handed over has played out.
+      if (this.playing || this.#pumping || this.#queue.length > 0 || !this.#writer) return;
       this.#writer.write(new Uint8Array(KEEPALIVE_BYTES)).catch(() => {});
     }, KEEPALIVE_MS);
   }
