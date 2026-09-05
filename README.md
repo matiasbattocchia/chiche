@@ -99,11 +99,12 @@ that latency is the API's.
 
 ## Notes
 
-- The echo-cancelled source needs a graph quantum of at least ~1024 frames on this
-  machine: at smaller quanta `module-echo-cancel` (WebRTC) runs out of playback
-  buffers and drops about half the capture once any audio has played through its
-  sink. The metrics summary line (`mic entregó Xs en Ys`) catches it; the fix is
-  `default.clock.min-quantum = 1024` in a `pipewire.conf.d` drop-in.
+- While echo cancellation is loaded the app forces the PipeWire graph quantum to 480
+  frames (10 ms) and restores it on exit. The WebRTC canceller only accepts 10 ms
+  blocks, and a mic-side driver running at a different quantum than the sink-side one
+  makes `module-echo-cancel` drop half the capture after any playback. The metrics
+  summary line (`mic entregó Xs en Ys`) is the check: anything under 100% means
+  samples were lost before reaching the server.
 
 - Audio is mono PCM s16le: 16 kHz in, 24 kHz out.
 - The import map points at the SDK's **web** build. The Node build goes through
