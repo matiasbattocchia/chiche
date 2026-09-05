@@ -29,6 +29,37 @@ export interface Aec {
   unload(): Promise<void>;
 }
 
+/**
+ * The WebRTC canceller works in 10 ms blocks and the module feeds it graph-quantum-
+ * sized buffers: any other quantum garbles the capture, and a mic-side driver running
+ * at a different quantum than the sink-side one makes the module drop half the capture
+ * after playback. Only the global force pins every driver, so it is set for the run
+ * and put back afterwards — the same lifecycle as the module itself.
+ */
+const AEC_QUANTUM = 480;
+
+async function pwMetadata(...args: string[]): Promise<string | null> {
+  try {
+    const { success, stdout } = await new Deno.Command("pw-metadata", {
+      args: ["-n", "settings", ...args],
+      stdout: "piped",
+      stderr: "null",
+    }).output();
+    return success ? new TextDecoder().decode(stdout) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Forces the graph quantum; returns a restorer for the previous value. */
+async function forceQuantum(frames: number): Promise<() => Promise<void>> {
+  const before = (await pwMetadata())?.match(/clock\.force-quantum' value:'(\d+)'/)?.[1] ?? "0";
+  await pwMetadata("0", "clock.force-quantum", String(frames));
+  return async () => {
+    await pwMetadata("0", "clock.force-quantum", before);
+  };
+}
+
 async function pactl(...args: string[]): Promise<string> {
   const { success, stdout, stderr } = await new Deno.Command("pactl", {
     args,
@@ -79,6 +110,8 @@ export async function loadAec(): Promise<Aec | { error: string }> {
 
   if (!/^\d+$/.test(id)) return { error: `unexpected pactl output: ${id}` };
 
+  const restoreQuantum = await forceQuantum(AEC_QUANTUM);
+
   let unloaded = false;
   return {
     source: SOURCE_NAME,
@@ -87,6 +120,7 @@ export async function loadAec(): Promise<Aec | { error: string }> {
       if (unloaded) return;
       unloaded = true;
       await pactl("unload-module", id).catch(() => {});
+      await restoreQuantum();
     },
   };
 }
