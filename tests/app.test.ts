@@ -170,3 +170,16 @@ describe("push to talk", () => {
     expect(h.out.markers).toContain("turn complete");
   });
 });
+
+describe("late while still talking", () => {
+  test("a hot mic keeps the late-reply timer from firing", () => {
+    const h = harness();
+    h.conv.handleMessage({ serverContent: { inputTranscription: { text: "neto" } } });
+    h.out.lastLoud = 0.1; // the mic was loud 100 ms ago, and stays so
+    h.clock.advanceTo(LATE_REPLY_MS * 3);
+    expect(h.out.markers.filter((m) => m.startsWith("respuesta demorada"))).toEqual([]);
+    h.out.lastLoud = null; // quiet now: the next check fires
+    h.clock.advanceTo(LATE_REPLY_MS * 5);
+    expect(h.out.markers.some((m) => m.startsWith("respuesta demorada"))).toBe(true);
+  });
+});

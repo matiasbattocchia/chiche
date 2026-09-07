@@ -14,11 +14,14 @@
  * The process is killed on exit, so the audio graph is left exactly as we found it.
  */
 
+import { mkdir } from "node:fs/promises";
+
 /** Node names declared in aec.conf. */
 const SOURCE_NAME = "gemini_aec_source";
 const SINK_NAME = "gemini_aec_sink";
 
 const CONF = new URL("aec.conf", import.meta.url);
+const CONF_PATH = decodeURIComponent(CONF.pathname);
 const LOG_FILE = "data/aec.log";
 
 export interface Aec {
@@ -38,18 +41,18 @@ export interface Aec {
  */
 const AEC_QUANTUM = 480;
 
-async function pwMetadata(...args: string[]): Promise<string | null> {
+/** Runs a command to completion; null when it fails or isn't there. */
+async function run(cmd: string[]): Promise<string | null> {
   try {
-    const { success, stdout } = await new Deno.Command("pw-metadata", {
-      args: ["-n", "settings", ...args],
-      stdout: "piped",
-      stderr: "null",
-    }).output();
-    return success ? new TextDecoder().decode(stdout) : null;
+    const p = Bun.spawn(cmd, { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+    const out = await new Response(p.stdout).text();
+    return (await p.exited) === 0 ? out : null;
   } catch {
     return null;
   }
 }
+
+const pwMetadata = (...args: string[]) => run(["pw-metadata", "-n", "settings", ...args]);
 
 /** Forces the graph quantum; returns a restorer for the previous value. */
 async function forceQuantum(frames: number): Promise<() => Promise<void>> {
@@ -62,16 +65,7 @@ async function forceQuantum(frames: number): Promise<() => Promise<void>> {
 
 /** True once the module's source is in the graph. */
 async function sourcePresent(): Promise<boolean> {
-  try {
-    const { stdout } = await new Deno.Command("pactl", {
-      args: ["list", "short", "sources"],
-      stdout: "piped",
-      stderr: "null",
-    }).output();
-    return new TextDecoder().decode(stdout).includes(SOURCE_NAME);
-  } catch {
-    return false;
-  }
+  return ((await run(["pactl", "list", "short", "sources"])) ?? "").includes(SOURCE_NAME);
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -86,19 +80,15 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function killStale(): Promise<void> {
   let clients: { properties?: Record<string, string> }[];
   try {
-    const { stdout } = await new Deno.Command("pactl", {
-      args: ["-f", "json", "list", "clients"],
-      stdout: "piped",
-      stderr: "null",
-    }).output();
-    clients = JSON.parse(new TextDecoder().decode(stdout));
+    clients = JSON.parse((await run(["pactl", "-f", "json", "list", "clients"])) ?? "[]");
   } catch {
     return;
   }
   for (const { properties: p = {} } of clients) {
-    if (p["config.name"] !== CONF.pathname || !p["pipewire.sec.pid"]) continue;
-    await new Deno.Command("kill", { args: ["-TERM", p["pipewire.sec.pid"]], stderr: "null" })
-      .output().catch(() => {});
+    if (p["config.name"] !== CONF_PATH || !p["pipewire.sec.pid"]) continue;
+    try {
+      process.kill(parseInt(p["pipewire.sec.pid"], 10), "SIGTERM");
+    } catch { /* gone already */ }
     await sleep(200);
   }
 }
@@ -107,26 +97,24 @@ async function killStale(): Promise<void> {
 export async function loadAec(): Promise<Aec | { error: string }> {
   await killStale();
 
-  let child: Deno.ChildProcess;
+  let child: Bun.Subprocess<"ignore", "ignore", "pipe">;
   try {
-    await Deno.mkdir("data", { recursive: true });
-    const log = await Deno.open(LOG_FILE, { write: true, create: true, truncate: true });
-    child = new Deno.Command("pipewire", {
-      args: ["-c", CONF.pathname],
-      stdin: "null",
-      stdout: "null",
-      stderr: "piped",
-    }).spawn();
-    child.stderr.pipeTo(log.writable).catch(() => {});
+    await mkdir("data", { recursive: true });
+    child = Bun.spawn(["pipewire", "-c", CONF_PATH], { stdin: "ignore", stdout: "ignore", stderr: "pipe" });
+    const log = Bun.file(LOG_FILE).writer();
+    (async () => {
+      for await (const chunk of child.stderr) log.write(chunk);
+      await log.end();
+    })().catch(() => {});
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }
 
   let unloaded = false;
   // Never settles after our own unload: only an unasked-for death is news.
-  const died: Promise<string> = child.status.then((s) => {
+  const died: Promise<string> = child.exited.then((code) => {
     if (unloaded) return new Promise<string>(() => {});
-    const how = s.signal ? `señal ${s.signal}` : `código ${s.code}`;
+    const how = child.signalCode ? `señal ${child.signalCode}` : `código ${code}`;
     return `el proceso del módulo murió (${how}) — ver ${LOG_FILE}`;
   });
 
@@ -150,10 +138,8 @@ export async function loadAec(): Promise<Aec | { error: string }> {
     async unload() {
       if (unloaded) return;
       unloaded = true;
-      try {
-        child.kill("SIGTERM");
-        await child.status;
-      } catch { /* already gone */ }
+      child.kill("SIGTERM");
+      await child.exited;
       await restoreQuantum();
     },
   };

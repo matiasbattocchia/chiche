@@ -41,19 +41,21 @@ export interface Metrics {
   close(): string;
 }
 
+import { closeSync, mkdirSync, openSync, writeSync } from "node:fs";
+
 const dbfs = (rms: number) => rms > 0 ? 20 * Math.log10(rms / 32768) : -Infinity;
 const fmtDb = (db: number) => isFinite(db) ? db.toFixed(1).padStart(6) : "  -inf";
 
 /** A mono s16 WAV whose header is completed on close. */
 class WavWriter {
-  #file: Deno.FsFile;
+  #fd: number;
   #bytes = 0;
   readonly rate: number;
 
   constructor(path: string, rate: number) {
     this.rate = rate;
-    this.#file = Deno.openSync(path, { write: true, create: true, truncate: true });
-    this.#file.writeSync(new Uint8Array(44));
+    this.#fd = openSync(path, "w");
+    writeSync(this.#fd, new Uint8Array(44));
   }
 
   /** Samples written so far. */
@@ -62,7 +64,7 @@ class WavWriter {
   }
 
   write(pcm: Uint8Array): void {
-    this.#file.writeSync(pcm);
+    writeSync(this.#fd, pcm);
     this.#bytes += pcm.length;
   }
 
@@ -86,20 +88,18 @@ class WavWriter {
     h.setUint16(34, 16, true);
     ascii(36, "data");
     h.setUint32(40, this.#bytes, true);
-    this.#file.seekSync(0, Deno.SeekMode.Start);
-    this.#file.writeSync(new Uint8Array(h.buffer));
-    this.#file.close();
+    writeSync(this.#fd, new Uint8Array(h.buffer), 0, 44, 0);
+    closeSync(this.#fd);
   }
 }
 
 export function openMetrics(path: string): Metrics {
   const dir = path.slice(0, path.lastIndexOf("/"));
-  if (dir) Deno.mkdirSync(dir, { recursive: true });
-  const file = Deno.openSync(path, { write: true, create: true, truncate: true });
-  const encoder = new TextEncoder();
+  if (dir) mkdirSync(dir, { recursive: true });
+  const fd = openSync(path, "w");
   const start = performance.now();
   const now = () => (performance.now() - start) / 1000;
-  const line = (s: string) => file.writeSync(encoder.encode(`${now().toFixed(3).padStart(8)} ${s}\n`));
+  const line = (s: string) => writeSync(fd, `${now().toFixed(3).padStart(8)} ${s}\n`);
 
   const sibling = (name: string) => (dir ? `${dir}/` : "") + name;
   const micWav = new WavWriter(sibling("mic.wav"), 16000);
@@ -210,7 +210,7 @@ export function openMetrics(path: string): Metrics {
       const summary = `mic entregó ${audio.toFixed(1)}s de audio en ${wall.toFixed(1)}s (${pct}%)` +
         (pct < 90 ? " — capturas perdidas: el servidor oyó el audio comprimido en el tiempo" : "");
       line(`· ${summary}`);
-      file.close();
+      closeSync(fd);
       micWav.close();
       vozWav.close();
       return summary;

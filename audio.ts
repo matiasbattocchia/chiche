@@ -34,19 +34,16 @@ export function startMic(
   onChunk: (chunk: Uint8Array) => void,
   { target }: { target?: string } = {},
 ): Mic {
-  const record = new Deno.Command("pw-record", {
-    args: [
-      ...(target ? ["--target", target] : []),
-      "--rate", "16000",
-      "--channels", "1",
-      "--format", "s16",
-      "--latency", "10ms",
-      "--raw",
-      "-",
-    ],
-    stdout: "piped",
-    stderr: "null",
-  }).spawn();
+  const record = Bun.spawn([
+    "pw-record",
+    ...(target ? ["--target", target] : []),
+    "--rate", "16000",
+    "--channels", "1",
+    "--format", "s16",
+    "--latency", "10ms",
+    "--raw",
+    "-",
+  ], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
 
   /** Partial frame carried over between reads; fresh per capture session. */
   let pending = new Uint8Array(0);
@@ -96,10 +93,8 @@ export function startMic(
   return {
     flush,
     async stop() {
-      try {
-        record.kill("SIGTERM");
-      } catch { /* already gone */ }
-      await record.status.catch(() => {});
+      record.kill("SIGTERM");
+      await record.exited;
     },
   };
 }
@@ -122,8 +117,8 @@ const KEEPALIVE_BYTES = KEEPALIVE_MS * 48;
 export class Speaker {
   /** PipeWire node to play into; the default sink when unset. */
   #target?: string;
-  #proc: Deno.ChildProcess | null = null;
-  #writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
+  #proc: Bun.Subprocess<"pipe", "ignore", "ignore"> | null = null;
+  #writer: { write(chunk: Uint8Array): Promise<void>; releaseLock(): void } | null = null;
   #queue: Uint8Array[] = [];
   #pumping = false;
   #keepalive: ReturnType<typeof setInterval> | undefined;
@@ -204,21 +199,26 @@ export class Speaker {
 
   #spawn(): void {
     if (this.#proc) return;
-    this.#proc = new Deno.Command("pw-play", {
-      args: [
-        ...(this.#target ? ["--target", this.#target] : []),
-        "--rate", "24000",
-        "--channels", "1",
-        "--format", "s16",
-        "--latency", "10ms",
-        "--raw",
-        "-",
-      ],
-      stdin: "piped",
-      stdout: "null",
-      stderr: "null",
-    }).spawn();
-    this.#writer = this.#proc.stdin.getWriter();
+    this.#proc = Bun.spawn([
+      "pw-play",
+      ...(this.#target ? ["--target", this.#target] : []),
+      "--rate", "24000",
+      "--channels", "1",
+      "--format", "s16",
+      "--latency", "10ms",
+      "--raw",
+      "-",
+    ], { stdin: "pipe", stdout: "ignore", stderr: "ignore" });
+    // Bun's stdin is a FileSink; wrapped as a writer so the pump awaits real backpressure.
+    const sink = this.#proc.stdin;
+    this.#writer = {
+      async write(chunk: Uint8Array) {
+        const n = sink.write(chunk);
+        if (n < chunk.length) throw new Error("short write");
+        await sink.flush();
+      },
+      releaseLock() {},
+    };
     this.#startKeepalive();
   }
 
@@ -231,9 +231,6 @@ export class Speaker {
     try {
       writer?.releaseLock();
     } catch { /* a write was in flight */ }
-    try {
-      proc?.kill("SIGKILL");
-    } catch { /* already gone */ }
-    proc?.status.catch(() => {});
+    proc?.kill("SIGKILL");
   }
 }

@@ -47,10 +47,10 @@ import {
   ThinkingLevel,
   Type,
 } from "@google/genai";
-import { decodeBase64, encodeBase64 } from "@std/encoding/base64";
 import { holdSupported, readKeys, restoreKeyboard } from "./keys.ts";
-import { connectMu, type Mu, type MuUpdate } from "./mu.ts";
+import type { Mu, MuUpdate } from "./mu.ts";
 import { createConversation } from "./conversation.ts";
+import { mkdir, rm } from "node:fs/promises";
 import { openMetrics } from "./metrics.ts";
 import { dim, onSignals, out, preflight, startAudio, transcript } from "./shell.ts";
 
@@ -69,13 +69,12 @@ const VAD_SILENCE_MS = 700;
  * Blank (or missing) means the session runs with no system instruction at all — the same
  * file whether or not mu is beside it.
  */
-const INSTRUCTION = (await Deno.readTextFile(
-  new URL("INSTRUCTIONS.md", import.meta.url),
-).catch(() => "")).trim();
+const INSTRUCTION = (await Bun.file(new URL("INSTRUCTIONS.md", import.meta.url)).text().catch(() => "")).trim();
 
-const MU = !Deno.args.includes("--no-mu");
-const PTT = Deno.args.includes("--ptt");
-const AEC = !Deno.args.includes("--no-aec");
+const ARGS = process.argv.slice(2);
+const MU = !ARGS.includes("--no-mu");
+const PTT = ARGS.includes("--ptt");
+const AEC = !ARGS.includes("--no-aec");
 
 /**
  * Print voice-activity markers. Outside push-to-talk they are derived from the turn
@@ -122,22 +121,22 @@ const metrics = openMetrics(METRICS_FILE);
 let resumptionHandle: string | undefined;
 if (MU) {
   try {
-    resumptionHandle = (await Deno.readTextFile(HANDLE_FILE)).trim() || undefined;
+    resumptionHandle = (await Bun.file(HANDLE_FILE).text()).trim() || undefined;
   } catch { /* first run */ }
 }
 
 function saveHandle(handle: string) {
   resumptionHandle = handle;
   if (!MU) return;
-  Deno.mkdir("data/relay", { recursive: true })
-    .then(() => Deno.writeTextFile(HANDLE_FILE, handle))
+  mkdir("data/relay", { recursive: true })
+    .then(() => Bun.write(HANDLE_FILE, handle))
     .catch(() => {});
 }
 
 async function dropHandle(reason: string) {
   status(`${reason} — empiezo una conversación nueva`);
   resumptionHandle = undefined;
-  await Deno.remove(HANDLE_FILE).catch(() => {});
+  await rm(HANDLE_FILE, { force: true }).catch(() => {});
 }
 
 let mu: Mu | null = null;
@@ -208,7 +207,7 @@ const conv = createConversation({
   status,
   vadEvent,
   metrics,
-  decodeBase64,
+  decodeBase64: (data) => Uint8Array.from(Buffer.from(data, "base64")),
   sendToolResponse(id, name, response) {
     session?.sendToolResponse({ functionResponses: [{ id, name, response }] });
   },
@@ -244,10 +243,10 @@ function setTalking(on: boolean) {
 
 // --- Connection ---
 
-const apiKey = Deno.env.get("GEMINI_API_KEY");
+const apiKey = process.env.GEMINI_API_KEY;
 if (!apiKey) {
   console.error("falta GEMINI_API_KEY (mise lo carga desde .env).");
-  Deno.exit(1);
+  process.exit(1);
 }
 const ai = new GoogleGenAI({ apiKey });
 
@@ -353,7 +352,7 @@ async function cleanup() {
   out(dim(`· ${metrics.close()}
 `));
   restoreKeyboard();
-  if (Deno.stdin.isTerminal()) Deno.stdin.setRaw(false);
+  if (process.stdin.isTTY) process.stdin.setRawMode(false);
 }
 
 // --- Startup ---
@@ -365,7 +364,7 @@ const rig = await startAudio(AEC, (chunk) => {
   metrics.frame(chunk, sent, rig.speaker.playing);
   if (!sent) return;
   session!.sendRealtimeInput({
-    audio: { data: encodeBase64(chunk), mimeType: "audio/pcm;rate=16000" },
+    audio: { data: Buffer.from(chunk).toString("base64"), mimeType: "audio/pcm;rate=16000" },
   });
   conv.micChunkSent(chunk);
 }, (error) => status(`sin cancelación de eco: ${error}`));
@@ -378,6 +377,8 @@ out(dim(`Live API · ${MODEL}${MU ? " + mu" : ""}\n`));
 // the failure out loud instead of the terminal explaining it to nobody.
 if (MU) {
   try {
+    // Loaded only when wanted: mu's client pulls in the mu project's own graph.
+    const { connectMu } = await import("./mu.ts");
     mu = await connectMu(inject);
     status(`mu conectado · agente ${mu.agent}`);
     // On an unasked-for hangup the handle is dead weight: dropping it makes `input`
@@ -440,4 +441,4 @@ while (running) {
 
 await cleanup();
 out("\n" + dim("listo.\n"));
-Deno.exit(0);
+process.exit(0);

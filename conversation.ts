@@ -56,6 +56,8 @@ export interface ConversationOptions {
 export const LATE_REPLY_MS = 2500;
 /** A gap this long between audio chunks mid-reply is a stall. */
 export const STALL_GAP_MS = 1500;
+/** Under this much audio, the realtime ratio says nothing. */
+export const MIN_JUDGED_REPLY_MS = 1000;
 
 // --- Deaf sessions ---
 //
@@ -117,11 +119,27 @@ export function createConversation(io: ConversationIO, opts: ConversationOptions
     }, delay);
   }
 
-  /** Your turn was heard: the reply's clock starts. */
+  /**
+   * Your turn was heard: the reply's clock starts. The transcript arrives in fragments
+   * while you are still talking, so "late" is measured from your last loud mic chunk,
+   * not from the fragment — the timer keeps re-arming while the mic is hot.
+   */
   function expectReply() {
     if (replyStartedAt !== null) return;
     replyDueAt = timers.now();
-    armStallTimer(LATE_REPLY_MS, () => `respuesta demorada · ${((timers.now() - replyDueAt!) / 1000).toFixed(1)}s sin audio`);
+    const check = () => {
+      const quietMs = (io.metrics.sinceLoud() ?? Infinity) * 1000;
+      if (quietMs < LATE_REPLY_MS) {
+        timers.clearTimeout(stallTimer);
+        stallTimer = timers.setTimeout(check, LATE_REPLY_MS - quietMs);
+        return;
+      }
+      const text = `respuesta demorada · ${(Math.min(quietMs, timers.now() - replyDueAt!) / 1000).toFixed(1)}s sin audio`;
+      io.metrics.event(`· ${text}`);
+      io.vadEvent(text);
+    };
+    timers.clearTimeout(stallTimer);
+    stallTimer = timers.setTimeout(check, LATE_REPLY_MS);
   }
 
   function noteReplyAudio(ms: number) {
@@ -140,10 +158,11 @@ export function createConversation(io: ConversationIO, opts: ConversationOptions
     armStallTimer(STALL_GAP_MS, () => `servidor entrega lento · ${((timers.now() - lastAudioAt) / 1000).toFixed(1)}s sin audio`);
   }
 
-  /** The turn ended: report a reply that came in slower than it plays. */
+  /** The turn ended: report a reply that came in slower than it plays. A reply cut
+   *  short by a barge-in is too little to judge. */
   function replyEnded() {
     timers.clearTimeout(stallTimer);
-    if (replyStartedAt !== null && replyChunks > 1) {
+    if (replyStartedAt !== null && replyChunks > 1 && replyAudioMs >= MIN_JUDGED_REPLY_MS) {
       const streamS = (lastAudioAt - replyStartedAt) / 1000;
       const ratio = replyAudioMs / 1000 / Math.max(streamS, 0.001);
       if (ratio < 1) {

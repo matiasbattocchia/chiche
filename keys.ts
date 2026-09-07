@@ -23,9 +23,8 @@ const KITTY_FLAGS = 1 | 2 | 8;
 /** How long to wait for the terminal to answer the capability query. */
 const HANDSHAKE_TIMEOUT_MS = 250;
 
-const encoder = new TextEncoder();
 const decoder = new TextDecoder();
-const write = (s: string) => Deno.stdout.writeSync(encoder.encode(s));
+const write = (s: string) => { process.stdout.write(s); };
 
 /** Matches one complete CSI sequence: ESC [ params final. */
 // deno-lint-ignore no-control-regex
@@ -52,27 +51,27 @@ export async function readKeys(
   { wantHold }: { wantHold: boolean },
 ): Promise<void> {
   // Piped stdin (CI, smoke tests) has no raw mode; just park forever.
-  if (!Deno.stdin.isTerminal()) {
+  if (!process.stdin.isTTY) {
     await new Promise<void>(() => {});
     return;
   }
 
-  Deno.stdin.setRaw(true);
+  process.stdin.setRawMode(true);
+  const reader = Bun.stdin.stream().getReader();
   try {
     // Ask for the current kitty flags, then for the primary device attributes.
     // Essentially every terminal answers DA, so it acts as a sentinel: once the
     // DA reply arrives we know the kitty reply either came or never will.
     if (wantHold) write("\x1b[?u\x1b[c");
 
-    const buf = new Uint8Array(1024);
     let pending = "";
     let handshaking = wantHold;
     const deadline = Date.now() + HANDSHAKE_TIMEOUT_MS;
 
     while (true) {
-      const n = await Deno.stdin.read(buf);
-      if (n === null) return;
-      pending += decoder.decode(buf.subarray(0, n), { stream: true });
+      const { value, done } = await reader.read();
+      if (done) return;
+      pending += decoder.decode(value, { stream: true });
 
       if (handshaking && Date.now() > deadline) handshaking = false;
 
@@ -122,7 +121,8 @@ export async function readKeys(
     }
   } finally {
     restoreKeyboard();
-    Deno.stdin.setRaw(false);
+    reader.releaseLock();
+    process.stdin.setRawMode(false);
   }
 }
 

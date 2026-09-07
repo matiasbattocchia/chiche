@@ -12,8 +12,7 @@ export const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
 export const italic = (s: string) => `\x1b[3m${s}\x1b[0m`;
 export const cyan = (s: string) => `\x1b[36m${s}\x1b[0m`;
 
-const encoder = new TextEncoder();
-export const out = (s: string) => Deno.stdout.writeSync(encoder.encode(s));
+export const out = (s: string) => { process.stdout.write(s); };
 
 // --- Transcript ---
 
@@ -55,12 +54,9 @@ export function transcript(labels: { user: string; model: string }): Transcript 
 
 async function pactl(args: string[]): Promise<string | null> {
   try {
-    const { success, stdout } = await new Deno.Command("pactl", {
-      args,
-      stdout: "piped",
-      stderr: "null",
-    }).output();
-    return success ? new TextDecoder().decode(stdout).trim() : null;
+    const p = Bun.spawn(["pactl", ...args], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+    const out = await new Response(p.stdout).text();
+    return (await p.exited) === 0 ? out.trim() : null;
   } catch {
     return null;
   }
@@ -117,9 +113,9 @@ const SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
  */
 export function onSignals(cleanup: () => Promise<void>) {
   for (const [signal, num] of Object.entries(SIGNALS)) {
-    Deno.addSignalListener(signal as keyof typeof SIGNALS, async () => {
+    process.on(signal, async () => {
       await cleanup();
-      Deno.exit(128 + num);
+      process.exit(128 + num);
     });
   }
 }
