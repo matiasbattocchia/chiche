@@ -5,24 +5,14 @@
 {
   // harness machinery — every deployment works on the defaults
   "system": {
-    // cap on stop() awaiting an in-flight turn
-    "stopTimeoutMs": 5000,
     // a bash call's wall cap unless the model asks for another
     "bashTimeoutMs": 120000,
-    // turn-lease TTL; an older lease is stolen (the crash signal)
-    "lockTtlMs": 120000,
-    // slow outer retries after the SDK's own fast ones
-    "retryDelaysMs": [5000,20000],
     // est. tokens of raw event JSON (~1.8x the prompt) before a checkpoint runs
     "compactAt": 50000,
     // est. tokens a checkpoint leaves uncovered
     "keepRecent": 20000,
     // history query cap — the prompt's size guard
     "windowLimit": 500,
-    // echo settle before the mirror's fan-in copies
-    "mirrorSettleMs": 1000,
-    // how far back an echo may claim an unclaimed CC
-    "mirrorClaimMs": 60000,
     // how long a world message waits for the rest of its burst before a turn runs
     "debounceMs": 5000
   },
@@ -30,7 +20,7 @@
   "org": {
     // the org's clock (IANA) — every rendered stamp, cron and sleep span reads it
     "timezone": "America/Mendoza",
-    // parked until the i18n seam — render is English for now
+    // the org's locale (es_AR.UTF-8) — LANG in every agent shell and media processor, so tools and transcribers speak the org's language; unset, they inherit the harness's
     "locale": null,
     // backlog an agent inherits at boot; lower it to come up quietly
     "backlogHours": 24,
@@ -63,11 +53,13 @@
     // shell command, audio bytes on stdin → transcript on stdout — e.g. "processors/qwen-asr/transcribe.sh" (root-relative; see its README); null ⇒ no transcription
     "audio": null
   },
-  // the roster: every key is an agent — overrides of org.agent, plus declared handles
+  // the roster: every key is an agent, its folder and its unix user
   "agents": {
+    // <name>: any org.agent key re-declared, plus identity — the principal's name (the agent goes by it) and the handles they are known by; null ⇒ not declared
     "matias": {}
   },
   // the connectors' knobs — a subsection per connector, validated by its owner
   "connections": {
   }
 }
+
