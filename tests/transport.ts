@@ -15,7 +15,9 @@ import { GoogleGenAI, type LiveServerMessage, Modality, ThinkingLevel } from "@g
 
 const MODEL = "gemini-3.1-flash-live-preview";
 const RUNS = parseInt(process.argv[2] ?? "3", 10);
-const FIXTURE = process.argv[3] ?? "tests/fixtures/hola.raw";
+const FIXTURE = process.argv[3] ?? "tests/fixtures/session0-12.raw";
+/** `--record <file>`: every server message as JSONL {t, msg}, t in ms since connect — tests/app.ts replays it. */
+const RECORD = process.argv.includes("--record") ? process.argv[process.argv.indexOf("--record") + 1] : null;
 const CHUNK = 320; // 10 ms of 16 kHz s16 mono, the app's send cadence
 const TAIL_S = 20; // silence after the clip, waiting for the reply to finish
 const INSTRUCTION = (await Bun.file("INSTRUCTIONS.md").text()).trim();
@@ -35,6 +37,7 @@ async function once(i: number): Promise<Run> {
   const r: Run = { connectMs: 0, firstInputMs: null, firstAudioMs: null, lastAudioMs: null, audioMs: 0, chunks: 0,
     outputs: [], inputs: [], events: [], gaps: [], bytesPerSecond: [], turnsWithoutAudio: 0 };
   const t0 = performance.now(); const now = () => performance.now() - t0;
+  const recorded: string[] = [];
   let turnHadAudio = false, done = false, bytesThisSecond = 0;
   const meter = setInterval(() => { r.bytesPerSecond.push(bytesThisSecond); bytesThisSecond = 0; }, 1000);
   const session = await ai.live.connect({
@@ -52,6 +55,7 @@ async function once(i: number): Promise<Run> {
     callbacks: {
       onmessage: (m: LiveServerMessage) => {
         bytesThisSecond += JSON.stringify(m).length;
+        if (RECORD) recorded.push(JSON.stringify({ t: Math.round(now()), msg: m }));
         const c = m.serverContent;
         const t = now();
         for (const p of c?.modelTurn?.parts ?? []) {
@@ -91,6 +95,7 @@ async function once(i: number): Promise<Run> {
   }
   clearInterval(meter);
   session.close();
+  if (RECORD) await Bun.write(RECORD.replace(/\.jsonl$/, "") + (RUNS > 1 ? `.${i}` : "") + ".jsonl", recorded.join("\n") + "\n");
   return r;
 }
 

@@ -50,6 +50,7 @@ import {
 import { decodeBase64, encodeBase64 } from "@std/encoding/base64";
 import { holdSupported, readKeys, restoreKeyboard } from "./keys.ts";
 import { connectMu, type Mu, type MuUpdate } from "./mu.ts";
+import { createConversation } from "./conversation.ts";
 import { openMetrics } from "./metrics.ts";
 import { dim, onSignals, out, preflight, startAudio, transcript } from "./shell.ts";
 
@@ -107,8 +108,6 @@ let running = true;
 let muted = false;
 /** Push-to-talk only: whether the key is currently held (or toggled on). */
 let talking = false;
-/** Set while the model believes the user's turn is open. */
-let userSpeaking = false;
 
 /**
  * With mu along, each agent has ONE conversation, the way mu's log gives agent 2 one: the
@@ -200,212 +199,24 @@ function relayInput(text: string): Record<string, unknown> {
 
 // --- Server messages ---
 
-/** Whether the current connection said anything at all; a silent one means a bad resume. */
-let gotMessage = false;
+const conv = createConversation({
+  speaker: {
+    write: (audio) => rig.speaker.write(audio),
+    interrupt: () => rig.speaker.interrupt(),
+  },
+  transcribe,
+  status,
+  vadEvent,
+  metrics,
+  decodeBase64,
+  sendToolResponse(id, name, response) {
+    session?.sendToolResponse({ functionResponses: [{ id, name, response }] });
+  },
+  relayInput,
+  saveHandle,
+  closeSession: () => session?.close(),
+}, { ptt: PTT });
 
-// A session can go deaf without any signal: the server sheds load and ignores every
-// audio frame from setup on, or the connection half-opens mid-run and our sends land
-// nowhere — no error, no close, no transcription either way. Detected by pairing
-// what we send with what comes back: a stretch of speech-level audio, then silence
-// long enough for any endpointing to have fired, and still nothing from the server.
-// Reconnecting is the fix for the half-open case and costs nothing in the other.
-let loudSinceReactionMs = 0;
-let lastLoudAt = 0;
-let deafDetected = false;
-
-const LOUD_RMS = 1000;
-/** Speech this long would have drawn a transcription… */
-const DEAF_MIN_LOUD_MS = 2000;
-/** …within this much silence after it, at any latency seen in practice. */
-const DEAF_QUIET_MS = 5000;
-
-function watchForDeafSession(chunk: Uint8Array) {
-  if (deafDetected || chunk.byteOffset % 2 !== 0) return;
-  const samples = new Int16Array(chunk.buffer, chunk.byteOffset, chunk.byteLength >> 1);
-  let sum = 0;
-  let n = 0;
-  for (let i = 0; i < samples.length; i += 8, n++) sum += samples[i] * samples[i];
-  const now = performance.now();
-  if (Math.sqrt(sum / n) >= LOUD_RMS) {
-    loudSinceReactionMs += chunk.byteLength / 32; // 16 kHz s16 mono: 32 bytes per ms
-    lastLoudAt = now;
-    return;
-  }
-  if (loudSinceReactionMs >= DEAF_MIN_LOUD_MS && now - lastLoudAt >= DEAF_QUIET_MS) {
-    deafDetected = true;
-    metrics.event("· sesión sorda detectada");
-    status("hablaste y el servidor no reaccionó — sesión sorda, reconectando…");
-    session?.close();
-  }
-}
-
-const KNOWN_MESSAGE_KEYS = ["serverContent", "toolCall", "sessionResumptionUpdate", "usageMetadata"];
-const KNOWN_CONTENT_KEYS = [
-  "modelTurn", "interrupted", "inputTranscription", "interimInputTranscription",
-  "outputTranscription", "generationComplete", "turnComplete",
-];
-
-// --- Reply pacing ---
-//
-// The server sometimes delivers a reply late, or slower than realtime, with nothing
-// of ours in the loop (tests/transport.ts reproduces it 1 run in 5). It has to be
-// visible, or every slow session gets blamed on the audio path.
-
-/** A reply not started this long after your speech was transcribed is "late". */
-const LATE_REPLY_MS = 2500;
-/** A gap this long between audio chunks mid-reply is a stall. */
-const STALL_GAP_MS = 1500;
-
-let replyDueAt: number | null = null;
-let replyStartedAt: number | null = null;
-let lastAudioAt = 0;
-let replyAudioMs = 0;
-let replyChunks = 0;
-let stallTimer: ReturnType<typeof setTimeout> | undefined;
-
-function armStallTimer(delay: number, text: () => string) {
-  clearTimeout(stallTimer);
-  stallTimer = setTimeout(() => {
-    metrics.event(`· ${text()}`);
-    vadEvent(text());
-  }, delay);
-}
-
-/** Your turn was heard: the reply's clock starts. */
-function expectReply() {
-  if (replyStartedAt !== null) return;
-  replyDueAt = performance.now();
-  armStallTimer(LATE_REPLY_MS, () => `respuesta demorada · ${((performance.now() - replyDueAt!) / 1000).toFixed(1)}s sin audio`);
-}
-
-function noteReplyAudio(ms: number) {
-  const now = performance.now();
-  if (replyStartedAt === null) {
-    replyStartedAt = now;
-    if (replyDueAt !== null && now - replyDueAt >= LATE_REPLY_MS) {
-      vadEvent(`respuesta llegó · ${((now - replyDueAt) / 1000).toFixed(1)}s tarde`);
-    }
-    replyAudioMs = 0;
-    replyChunks = 0;
-  }
-  lastAudioAt = now;
-  replyAudioMs += ms;
-  replyChunks++;
-  armStallTimer(STALL_GAP_MS, () => `servidor entrega lento · ${((performance.now() - lastAudioAt) / 1000).toFixed(1)}s sin audio`);
-}
-
-/** The turn ended: report a reply that came in slower than it plays. */
-function replyEnded() {
-  clearTimeout(stallTimer);
-  if (replyStartedAt !== null && replyChunks > 1) {
-    const streamS = (lastAudioAt - replyStartedAt) / 1000;
-    const ratio = replyAudioMs / 1000 / Math.max(streamS, 0.001);
-    if (ratio < 1) {
-      const text = `respuesta a ${ratio.toFixed(1)}x tiempo real · ${(replyAudioMs / 1000).toFixed(1)}s de audio en ${streamS.toFixed(1)}s`;
-      metrics.event(`· ${text}`);
-      vadEvent(text);
-    }
-  }
-  replyDueAt = null;
-  replyStartedAt = null;
-}
-
-function handleMessage(message: LiveServerMessage) {
-  gotMessage = true;
-  // Anything outside the handled fields is worth a line: a quiet session has to
-  // show what the server was sending instead of speech.
-  const odd = Object.keys(message).filter((k) => !KNOWN_MESSAGE_KEYS.includes(k));
-  if (odd.length) metrics.event(`srv msg ${odd.join(",")}`);
-  if (message.serverContent || message.toolCall) loudSinceReactionMs = 0;
-  const resumption = message.sessionResumptionUpdate;
-  if (resumption?.resumable && resumption.newHandle) saveHandle(resumption.newHandle);
-
-  if (message.goAway) {
-    status(`la conexión cierra en ${message.goAway.timeLeft ?? "instantes"}, reconectando…`);
-  }
-
-  for (const call of message.toolCall?.functionCalls ?? []) {
-    const text = String((call.args as { text?: unknown })?.text ?? "");
-    metrics.event(`srv toolCall ${call.name} ${JSON.stringify(text).slice(0, 80)}`);
-    // Answer even a malformed call, and synchronously: an unanswered one stalls the model.
-    session?.sendToolResponse({
-      functionResponses: [{ id: call.id, name: call.name, response: relayInput(text) }],
-    });
-  }
-
-  const content = message.serverContent;
-  if (!content) return;
-  const oddContent = Object.keys(content).filter((k) => !KNOWN_CONTENT_KEYS.includes(k));
-  if (oddContent.length) metrics.event(`srv content ${oddContent.join(",")}`);
-
-  // A single event can carry audio and a transcript at once, so every field gets
-  // processed rather than stopping at the first hit.
-  const interrupted = content.interrupted === true;
-  if (interrupted) {
-    rig.speaker.interrupt();
-    replyEnded();
-    metrics.event("srv interrupted");
-    if (!PTT) {
-      vadEvent("speech detected · barge-in");
-      userSpeaking = true;
-    }
-  } else {
-    for (const part of content.modelTurn?.parts ?? []) {
-      if (part.inlineData?.data) {
-        const audio = decodeBase64(part.inlineData.data);
-        rig.speaker.write(audio);
-        metrics.playback(audio);
-        noteReplyAudio(audio.length / 48);
-        metrics.event(`srv audio ${(audio.length / 48).toFixed(0)}ms`);
-      } else {
-        // A turn with no audio in it: say what it carried instead (text, thought…).
-        metrics.event(`srv part ${Object.keys(part).join(",")} ${JSON.stringify(part.text ?? "").slice(0, 80)}`);
-      }
-    }
-  }
-
-  const inputText = content.inputTranscription?.text ?? content.interimInputTranscription?.text;
-  if (inputText) {
-    metrics.event(`srv input ${JSON.stringify(inputText)}`);
-    if (content.inputTranscription?.text) expectReply();
-    // Under --ptt we already printed an exact start marker on the keypress.
-    if (!userSpeaking && !PTT) {
-      vadEvent("speech start");
-      userSpeaking = true;
-    }
-    transcribe("user", inputText);
-  }
-
-  if (content.outputTranscription?.text) {
-    metrics.event(`srv output ${JSON.stringify(content.outputTranscription.text)}`);
-    if (userSpeaking && !PTT) {
-      // The gap between your last loud window and the model's first word: the
-      // endpointing latency as you experience it.
-      vadEvent(`speech end${sinceLoud(" · respuesta ")}`);
-      userSpeaking = false;
-    }
-    transcribe("model", content.outputTranscription.text);
-  }
-
-  if (content.generationComplete) {
-    // Nothing more is coming until turnComplete: the gap after this isn't a stall.
-    clearTimeout(stallTimer);
-    metrics.event("srv generation complete");
-    vadEvent("generation complete");
-  }
-  if (content.turnComplete) {
-    replyEnded();
-    metrics.event("srv turn complete");
-    vadEvent("turn complete");
-    if (!PTT) userSpeaking = false;
-  }
-}
-
-/** `" · respuesta +1.9s"`: time since the mic was last loud, or nothing if it never was. */
-function sinceLoud(label: string): string {
-  const s = metrics.sinceLoud();
-  return s === null ? "" : `${label}+${s.toFixed(1)}s`;
-}
 
 // --- Push to talk ---
 
@@ -495,7 +306,7 @@ function connect(): Promise<{ session: Session; closed: Promise<void> }> {
       },
     },
     callbacks: {
-      onmessage: handleMessage,
+      onmessage: conv.handleMessage,
       onerror: (e: ErrorEvent) => status(`error: ${e.message}`),
       onclose: () => resolveClosed(),
     },
@@ -556,7 +367,7 @@ const rig = await startAudio(AEC, (chunk) => {
   session!.sendRealtimeInput({
     audio: { data: encodeBase64(chunk), mimeType: "audio/pcm;rate=16000" },
   });
-  watchForDeafSession(chunk);
+  conv.micChunkSent(chunk);
 }, (error) => status(`sin cancelación de eco: ${error}`));
 
 onSignals(cleanup);
@@ -615,16 +426,14 @@ while (running) {
   // A reconnect mid-turn needs the open turn re-announced.
   if (PTT && talking) session.sendRealtimeInput({ activityStart: {} });
   while (backlog.length > 0) inject(backlog.shift()!);
-  gotMessage = false;
-  loudSinceReactionMs = 0;
-  deafDetected = false;
+  conv.connectionOpened();
   await Promise.race([closed, keys]);
   session?.close();
   session = null;
   rig.speaker.interrupt();
   // A resume the server accepts at the socket but hangs up on without a word is the
   // other face of a stale handle; keeping it would reconnect into the same hangup.
-  if (running && resumptionHandle && !gotMessage) {
+  if (running && resumptionHandle && !conv.gotMessage) {
     await dropHandle("la conversación guardada ya no sirve");
   }
 }
