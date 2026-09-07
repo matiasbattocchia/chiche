@@ -1,0 +1,8 @@
+{
+  "name": "vibes",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@google/genai": "^2.19.0"
+  }
+}
