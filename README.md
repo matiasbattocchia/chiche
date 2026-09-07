@@ -29,9 +29,10 @@ Keys: `m` mute · `space` interrupt the model · `q` quit.
 Under `--ptt`, space holds to talk — or toggles, if the terminal doesn't report
 key releases.
 
-Echo cancellation loads PipeWire's `module-echo-cancel` for the run and unloads
-it on exit, leaving the audio graph as it found it. It binds to whatever the
-default sink is at startup, so switch devices *before* starting.
+Echo cancellation raises PipeWire's `module-echo-cancel` in a process of its own
+(`pipewire -c aec.conf`) for the run and kills it on exit, leaving the audio graph
+as it found it. It binds to whatever the default sink is at startup, so switch
+devices *before* starting. Its log is `data/aec.log`.
 
 ## Two agents
 
@@ -76,6 +77,7 @@ mu's daemon is raised on demand and reaps itself ~30s after the REPL detaches.
 | `shell.ts` | terminal shell: transcript, signals, the audio rig |
 | `audio.ts` | `pw-record` capture and `pw-play` playback |
 | `aec.ts` | echo-cancel module lifecycle |
+| `aec.conf` | the module's PipeWire process — and why it is not loaded into pipewire-pulse |
 | `keys.ts` | stdin reader, kitty keyboard protocol for key releases |
 
 ## Debugging endpointing
@@ -105,6 +107,12 @@ that latency is the API's.
   makes `module-echo-cancel` drop half the capture after any playback. The metrics
   summary line (`mic entregó Xs en Ys`) is the check: anything under 100% means
   samples were lost before reaching the server.
+- The module is not loaded with `pactl load-module`: inside pipewire-pulse, at
+  quantum 480, its data loop occasionally overruns rtkit's 200 ms realtime budget
+  and the kernel SIGKILLs the daemon (`RLIMIT_RTTIME`), taking the module with it a
+  few seconds into a reply — after which `pw-record` silently reattaches to the raw
+  mic. `aec.conf` runs it without realtime scheduling; if that process dies anyway
+  the app says so (`sin cancelación de eco: …`).
 
 - Audio is mono PCM s16le: 16 kHz in, 24 kHz out.
 - The import map points at the SDK's **web** build. The Node build goes through

@@ -145,7 +145,12 @@ export async function startAudio(
   if (wantAec) {
     const result = await loadAec();
     if ("error" in result) onAecError(result.error);
-    else aec = result;
+    else {
+      aec = result;
+      // The module's own death is silent otherwise: pw-record just reattaches to
+      // the raw mic, and the model starts hearing itself.
+      aec.died.then(onAecError);
+    }
   }
   const speaker = new Speaker({ target: aec?.sink });
   const mic = startMic(onChunk, { target: aec?.source });

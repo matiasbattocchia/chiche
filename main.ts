@@ -63,25 +63,14 @@ const LANGUAGE = "es-AR";
  */
 const VAD_SILENCE_MS = 700;
 
-const SOLO_INSTRUCTION =
-  "Sos un asistente conversacional por voz. Hablá siempre en español, con un tono cercano " +
-  "y natural. Tus respuestas son habladas: mantenelas breves, sin listas ni markdown, como " +
-  "en una conversación real. Si no entendés algo, preguntá en lugar de suponer.";
-
-const MU_INSTRUCTION =
-  "Sos la voz de un equipo de dos. Vos interpretás; mu, tu compañero, construye.\n\n" +
-  "Hablás siempre en español, en tono cercano y natural. Tus respuestas son habladas: " +
-  "breves, sin listas ni markdown.\n\n" +
-  "Cuando el usuario quiere que se haga algo, se lo pedís a mu con la herramienta input. " +
-  "No repitas literalmente lo que dijo el usuario: entendé qué quiere y escribilo como una " +
-  "instrucción clara. input devuelve enseguida y no es la respuesta de mu, que llega " +
-  "después. Mientras mu trabaja podés mandarle más instrucciones: lo van guiando.\n\n" +
-  "Las líneas que empiezan con [mu] son el sistema contándote qué está pasando del otro " +
-  "lado: nunca son el usuario hablando. Las que dicen 'trabajando' son para que sepas que " +
-  "mu sigue ocupado; no las anuncies solas, usalas si el usuario pregunta por qué tarda. " +
-  "Cuando llega la respuesta de mu, contala con tus palabras: quedate con lo que al " +
-  "usuario le importa y dejá afuera el detalle técnico salvo que lo pida.\n\n" +
-  "Si no entendés qué quiere el usuario, preguntale antes de molestar a mu.";
+/**
+ * Agent 1's system instruction, read from INSTRUCTIONS.md beside the source at startup.
+ * Blank (or missing) means the session runs with no system instruction at all — the same
+ * file whether or not mu is beside it.
+ */
+const INSTRUCTION = (await Deno.readTextFile(
+  new URL("INSTRUCTIONS.md", import.meta.url),
+).catch(() => "")).trim();
 
 const MU = !Deno.args.includes("--no-mu");
 const PTT = Deno.args.includes("--ptt");
@@ -250,8 +239,18 @@ function watchForDeafSession(chunk: Uint8Array) {
   }
 }
 
+const KNOWN_MESSAGE_KEYS = ["serverContent", "toolCall", "sessionResumptionUpdate", "usageMetadata"];
+const KNOWN_CONTENT_KEYS = [
+  "modelTurn", "interrupted", "inputTranscription", "interimInputTranscription",
+  "outputTranscription", "generationComplete", "turnComplete",
+];
+
 function handleMessage(message: LiveServerMessage) {
   gotMessage = true;
+  // Anything outside the handled fields is worth a line: a quiet session has to
+  // show what the server was sending instead of speech.
+  const odd = Object.keys(message).filter((k) => !KNOWN_MESSAGE_KEYS.includes(k));
+  if (odd.length) metrics.event(`srv msg ${odd.join(",")}`);
   if (message.serverContent || message.toolCall) loudSinceReactionMs = 0;
   const resumption = message.sessionResumptionUpdate;
   if (resumption?.resumable && resumption.newHandle) saveHandle(resumption.newHandle);
@@ -262,6 +261,7 @@ function handleMessage(message: LiveServerMessage) {
 
   for (const call of message.toolCall?.functionCalls ?? []) {
     const text = String((call.args as { text?: unknown })?.text ?? "");
+    metrics.event(`srv toolCall ${call.name} ${JSON.stringify(text).slice(0, 80)}`);
     // Answer even a malformed call, and synchronously: an unanswered one stalls the model.
     session?.sendToolResponse({
       functionResponses: [{ id: call.id, name: call.name, response: relayInput(text) }],
@@ -270,6 +270,8 @@ function handleMessage(message: LiveServerMessage) {
 
   const content = message.serverContent;
   if (!content) return;
+  const oddContent = Object.keys(content).filter((k) => !KNOWN_CONTENT_KEYS.includes(k));
+  if (oddContent.length) metrics.event(`srv content ${oddContent.join(",")}`);
 
   // A single event can carry audio and a transcript at once, so every field gets
   // processed rather than stopping at the first hit.
@@ -288,6 +290,9 @@ function handleMessage(message: LiveServerMessage) {
         rig.speaker.write(audio);
         metrics.playback(audio);
         metrics.event(`srv audio ${(audio.length / 48).toFixed(0)}ms`);
+      } else {
+        // A turn with no audio in it: say what it carried instead (text, thought…).
+        metrics.event(`srv part ${Object.keys(part).join(",")} ${JSON.stringify(part.text ?? "").slice(0, 80)}`);
       }
     }
   }
@@ -374,7 +379,7 @@ function connect(): Promise<{ session: Session; closed: Promise<void> }> {
       responseModalities: [Modality.AUDIO],
       // A bare string here breaks the session silently on the web build:
       // setup completes but the server never answers anything after it.
-      systemInstruction: { parts: [{ text: MU ? MU_INSTRUCTION : SOLO_INSTRUCTION }] },
+      ...(INSTRUCTION ? { systemInstruction: { parts: [{ text: INSTRUCTION }] } } : {}),
       speechConfig: {
         voiceConfig: { prebuiltVoiceConfig: { voiceName: VOICE } },
         // The input transcription guesses a language per utterance and drifts; the

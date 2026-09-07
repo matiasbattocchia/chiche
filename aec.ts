@@ -7,25 +7,25 @@
  * this module does — WebRTC's AEC, with its noise suppression and auto gain
  * along for the ride.
  *
- * Loading it creates a source/sink pair without touching the default devices:
- * we capture from the source and play into the sink, and PipeWire wires the
- * sink through to whatever the real output is. The module is unloaded on exit,
- * so the audio graph is left exactly as we found it.
+ * The module runs in a PipeWire process of our own (`pipewire -c aec.conf`), not
+ * inside pipewire-pulse: see aec.conf for why. It creates a source/sink pair
+ * without touching the default devices: we capture from the source and play into
+ * the sink, and PipeWire wires the sink through to whatever the real output is.
+ * The process is killed on exit, so the audio graph is left exactly as we found it.
  */
 
+/** Node names declared in aec.conf. */
 const SOURCE_NAME = "gemini_aec_source";
 const SINK_NAME = "gemini_aec_sink";
 
-const AEC_ARGS = [
-  "webrtc.noise_suppression=true",
-  "webrtc.high_pass_filter=true",
-  "webrtc.gain_control=true",
-  "webrtc.transient_suppression=true",
-].join(" ");
+const CONF = new URL("aec.conf", import.meta.url);
+const LOG_FILE = "data/aec.log";
 
 export interface Aec {
   readonly source: string;
   readonly sink: string;
+  /** Resolves if the module's process dies on its own — the AEC is gone from then on. */
+  readonly died: Promise<string>;
   unload(): Promise<void>;
 }
 
@@ -60,66 +60,100 @@ async function forceQuantum(frames: number): Promise<() => Promise<void>> {
   };
 }
 
-async function pactl(...args: string[]): Promise<string> {
-  const { success, stdout, stderr } = await new Deno.Command("pactl", {
-    args,
-    stdout: "piped",
-    stderr: "piped",
-  }).output();
-  if (!success) throw new Error(new TextDecoder().decode(stderr).trim());
-  return new TextDecoder().decode(stdout).trim();
+/** True once the module's source is in the graph. */
+async function sourcePresent(): Promise<boolean> {
+  try {
+    const { stdout } = await new Deno.Command("pactl", {
+      args: ["list", "short", "sources"],
+      stdout: "piped",
+      stderr: "null",
+    }).output();
+    return new TextDecoder().decode(stdout).includes(SOURCE_NAME);
+  } catch {
+    return false;
+  }
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 /**
- * Unloads any echo-cancel module we left behind previously.
+ * Kills the process a previous run left behind.
  *
- * A crash skips our cleanup, and loading a second module under the same node
- * names would leave two of them fighting over the graph.
+ * A crash skips our cleanup, and a second module under the same node names would
+ * leave two of them fighting over the graph. The daemon knows its clients by the
+ * config they run and the pid the kernel vouched for, so no pid file to trust.
  */
-async function unloadStale(): Promise<void> {
-  let modules: string;
+async function killStale(): Promise<void> {
+  let clients: { properties?: Record<string, string> }[];
   try {
-    modules = await pactl("list", "short", "modules");
+    const { stdout } = await new Deno.Command("pactl", {
+      args: ["-f", "json", "list", "clients"],
+      stdout: "piped",
+      stderr: "null",
+    }).output();
+    clients = JSON.parse(new TextDecoder().decode(stdout));
   } catch {
     return;
   }
-  for (const line of modules.split("\n")) {
-    if (!line.includes(SOURCE_NAME)) continue;
-    const id = line.split("\t")[0];
-    await pactl("unload-module", id).catch(() => {});
+  for (const { properties: p = {} } of clients) {
+    if (p["config.name"] !== CONF.pathname || !p["pipewire.sec.pid"]) continue;
+    await new Deno.Command("kill", { args: ["-TERM", p["pipewire.sec.pid"]], stderr: "null" })
+      .output().catch(() => {});
+    await sleep(200);
   }
 }
 
-/** Loads the module, or returns null with a reason if it isn't available. */
+/** Raises the module, or returns null with a reason if it isn't available. */
 export async function loadAec(): Promise<Aec | { error: string }> {
-  await unloadStale();
+  await killStale();
 
-  let id: string;
+  let child: Deno.ChildProcess;
   try {
-    id = await pactl(
-      "load-module",
-      "module-echo-cancel",
-      `source_name=${SOURCE_NAME}`,
-      `sink_name=${SINK_NAME}`,
-      "aec_method=webrtc",
-      `aec_args=${AEC_ARGS}`,
-    );
+    await Deno.mkdir("data", { recursive: true });
+    const log = await Deno.open(LOG_FILE, { write: true, create: true, truncate: true });
+    child = new Deno.Command("pipewire", {
+      args: ["-c", CONF.pathname],
+      stdin: "null",
+      stdout: "null",
+      stderr: "piped",
+    }).spawn();
+    child.stderr.pipeTo(log.writable).catch(() => {});
   } catch (e) {
     return { error: e instanceof Error ? e.message : String(e) };
   }
 
-  if (!/^\d+$/.test(id)) return { error: `unexpected pactl output: ${id}` };
+  let unloaded = false;
+  // Never settles after our own unload: only an unasked-for death is news.
+  const died: Promise<string> = child.status.then((s) => {
+    if (unloaded) return new Promise<string>(() => {});
+    const how = s.signal ? `señal ${s.signal}` : `código ${s.code}`;
+    return `el proceso del módulo murió (${how}) — ver ${LOG_FILE}`;
+  });
+
+  // The nodes take a moment to appear; a config error shows as the process exiting.
+  for (let i = 0; i < 40 && !(await sourcePresent()); i++) {
+    const gone = await Promise.race([died, sleep(100).then(() => null)]);
+    if (gone !== null) return { error: gone };
+  }
+  if (!(await sourcePresent())) {
+    unloaded = true;
+    child.kill("SIGTERM");
+    return { error: `${SOURCE_NAME} nunca apareció — ver ${LOG_FILE}` };
+  }
 
   const restoreQuantum = await forceQuantum(AEC_QUANTUM);
 
-  let unloaded = false;
   return {
     source: SOURCE_NAME,
     sink: SINK_NAME,
+    died,
     async unload() {
       if (unloaded) return;
       unloaded = true;
-      await pactl("unload-module", id).catch(() => {});
+      try {
+        child.kill("SIGTERM");
+        await child.status;
+      } catch { /* already gone */ }
       await restoreQuantum();
     },
   };
