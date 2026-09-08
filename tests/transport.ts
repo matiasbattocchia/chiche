@@ -39,6 +39,8 @@ async function once(i: number): Promise<Run> {
   const t0 = performance.now(); const now = () => performance.now() - t0;
   const recorded: string[] = [];
   let turnHadAudio = false, done = false, bytesThisSecond = 0;
+  let lastInputAt: number | null = null, turnFirstAudio: number | null = null, turnLastAudio = 0, turnAudioMs = 0;
+  const turns: string[] = [];
   const meter = setInterval(() => { r.bytesPerSecond.push(bytesThisSecond); bytesThisSecond = 0; }, 1000);
   const session = await ai.live.connect({
     model: MODEL,
@@ -63,11 +65,20 @@ async function once(i: number): Promise<Run> {
             const ms = p.inlineData.data.length * 3 / 4 / 48;
             if (r.firstAudioMs === null) r.firstAudioMs = t; else r.gaps.push(t - r.lastAudioMs!);
             r.lastAudioMs = t; r.audioMs += ms; r.chunks++; turnHadAudio = true;
+            if (turnFirstAudio === null) turnFirstAudio = t;
+            turnLastAudio = t; turnAudioMs += ms;
           } else r.events.push(`${t.toFixed(0)}ms part:${Object.keys(p).join(",")}`);
         }
-        if (c?.inputTranscription?.text) { if (r.firstInputMs === null) r.firstInputMs = t; r.inputs.push(c.inputTranscription.text); }
+        if (c?.inputTranscription?.text) { if (r.firstInputMs === null) r.firstInputMs = t; r.inputs.push(c.inputTranscription.text); lastInputAt = t; }
         if (c?.outputTranscription?.text) r.outputs.push(c.outputTranscription.text);
         if (c?.interrupted) r.events.push(`${t.toFixed(0)}ms interrupted`);
+        if (c?.turnComplete || c?.interrupted) {
+          if (turnFirstAudio !== null) {
+            const stream = (turnLastAudio - turnFirstAudio) / 1000, late = lastInputAt === null ? NaN : (turnFirstAudio - lastInputAt) / 1000;
+            turns.push(`${(turnFirstAudio / 1000).toFixed(0)}s: late ${late.toFixed(1)}s · ${(turnAudioMs / 1000).toFixed(1)}s audio in ${stream.toFixed(1)}s (${stream > 0.5 ? (turnAudioMs / 1000 / stream).toFixed(1) + "x" : "—"})${c?.interrupted ? " ✂" : ""}`);
+          }
+          turnFirstAudio = null; turnAudioMs = 0;
+        }
         if (c?.turnComplete) { if (!turnHadAudio) r.turnsWithoutAudio++; turnHadAudio = false; r.events.push(`${t.toFixed(0)}ms turnComplete`); }
         if (c?.generationComplete) done = true;
         if (m.toolCall) r.events.push(`${t.toFixed(0)}ms toolCall`);
@@ -92,9 +103,11 @@ async function once(i: number): Promise<Run> {
     const wait = due - performance.now();
     if (wait > 0) await Bun.sleep(wait);
     if (done && off >= clip.length && now() - (r.lastAudioMs ?? 0) > 2000) break;
+    done = false;
   }
   clearInterval(meter);
   session.close();
+  if (turns.length) console.log(`   turns:\n     ${turns.join("\n     ")}`);
   if (RECORD) await Bun.write(RECORD.replace(/\.jsonl$/, "") + (RUNS > 1 ? `.${i}` : "") + ".jsonl", recorded.join("\n") + "\n");
   return r;
 }
