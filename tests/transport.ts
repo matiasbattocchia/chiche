@@ -13,7 +13,7 @@
  */
 import { GoogleGenAI, type LiveServerMessage, Modality, ThinkingLevel } from "@google/genai/web";
 
-const MODEL = "gemini-3.1-flash-live-preview";
+const MODEL = process.env.MODEL ?? "gemini-3.1-flash-live-preview";
 const RUNS = parseInt(process.argv[2] ?? "3", 10);
 const FIXTURE = process.argv[3] ?? "tests/fixtures/session0-12.raw";
 /** `--record <file>`: every server message as JSONL {t, msg}, t in ms since connect — tests/app.ts replays it. */
@@ -42,13 +42,16 @@ async function once(i: number): Promise<Run> {
   let lastInputAt: number | null = null, turnFirstAudio: number | null = null, turnLastAudio = 0, turnAudioMs = 0;
   const turns: string[] = [];
   const meter = setInterval(() => { r.bytesPerSecond.push(bytesThisSecond); bytesThisSecond = 0; }, 1000);
-  const session = await ai.live.connect({
+  const connectTimeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("connect timed out after 30 s")), 30000));
+  const session = await Promise.race([connectTimeout, ai.live.connect({
     model: MODEL,
     config: {
       responseModalities: [Modality.AUDIO],
       systemInstruction: { parts: [{ text: INSTRUCTION }] },
-      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } }, languageCode: "es-AR" },
-      thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+      // languageCode, like thinkingLevel, is a Gemini 3 field: a 2.5 setup carrying it never completes
+      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } }, ...(MODEL.includes("gemini-3") ? { languageCode: "es-AR" } : {}) },
+      // thinkingLevel is a Gemini 3 knob: a 2.5 setup carrying it never completes (silently)
+      ...(MODEL.includes("gemini-3") ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } : {}),
       inputAudioTranscription: {}, outputAudioTranscription: {},
       contextWindowCompression: { slidingWindow: {} },
       sessionResumption: {},
@@ -89,7 +92,7 @@ async function once(i: number): Promise<Run> {
       onerror: (e) => r.events.push(`${now().toFixed(0)}ms error ${e.message}`),
       onclose: (e) => r.events.push(`${now().toFixed(0)}ms close ${e.code} ${e.reason}`),
     },
-  });
+  })]);
   r.connectMs = now();
   // real-time pacing: one 10 ms chunk per 10 ms, then silence
   const silence = new Uint8Array(CHUNK);
@@ -115,7 +118,8 @@ async function once(i: number): Promise<Run> {
 const fmt = (ms: number | null) => ms === null ? "  —  " : `${(ms / 1000).toFixed(2)}s`;
 console.log(`transport · ${MODEL} · clip ${(clip.length / 32000).toFixed(1)}s · ${RUNS} runs`);
 for (let i = 1; i <= RUNS; i++) {
-  const r = await once(i);
+  let r: Run;
+  try { r = await once(i); } catch (e) { console.log(`\n#${i} failed: ${e instanceof Error ? e.message : e}`); continue; }
   const g = r.gaps.length ? r.gaps.slice().sort((a, b) => a - b) : [0];
   const streamS = r.firstAudioMs !== null ? (r.lastAudioMs! - r.firstAudioMs) / 1000 : 0;
   console.log(`\n#${i} connect ${fmt(r.connectMs)} · input heard ${fmt(r.firstInputMs)} · first audio ${fmt(r.firstAudioMs)} · audio ${(r.audioMs / 1000).toFixed(1)}s in ${r.chunks} chunks over ${streamS.toFixed(1)}s (${streamS > 0 ? (r.audioMs / 1000 / streamS).toFixed(1) : "—"}x realtime) · gap p50 ${g[Math.floor(g.length / 2)].toFixed(0)}ms max ${g[g.length - 1].toFixed(0)}ms · empty turns ${r.turnsWithoutAudio}`);
