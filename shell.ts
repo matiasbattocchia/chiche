@@ -2,10 +2,15 @@
  * shell.ts — the app's terminal shell, kept apart from the conversation logic.
  *
  * The ANSI helpers, the transcript state machine, signal handling, and the audio rig
- * (AEC → speaker + mic) with its one valid teardown order.
+ * (speaker + mic) with its teardown order.
+ *
+ * There is no echo cancellation: the app expects headphones. PipeWire's echo-cancel
+ * module was tried and dropped — it lives inside the graph and inherits its quantum,
+ * driver pairing and realtime budget, which took a week without a reliable result. An
+ * in-process canceller fed our own playback as the far-end reference is the next step,
+ * when it comes.
  */
 
-import { type Aec, loadAec } from "./aec.ts";
 import { type Mic, Speaker, startMic } from "./audio.ts";
 
 export const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
@@ -89,8 +94,8 @@ async function describeDefault(kind: "source" | "sink"): Promise<string | null> 
 }
 
 /**
- * Reports the default source and sink — the endpoints the whole audio path
- * (echo-cancel included) will bind to — with their volumes. WirePlumber
+ * Reports the default source and sink — the endpoints the audio path binds to —
+ * with their volumes. WirePlumber
  * restores per-node volume and mute from saved state, so a quiet or muted
  * endpoint can predate the run and go unnoticed.
  */
@@ -109,7 +114,8 @@ const SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
 
 /**
  * Runs `cleanup` and exits 128+signum on the signals raw mode doesn't turn into keys —
- * an external kill still has to unload the PipeWire module rather than leak it.
+ * an external kill still has to stop the capture and playback processes and restore
+ * the terminal.
  */
 export function onSignals(cleanup: () => Promise<void>) {
   for (const [signal, num] of Object.entries(SIGNALS)) {
@@ -125,39 +131,20 @@ export function onSignals(cleanup: () => Promise<void>) {
 export interface AudioRig {
   speaker: Speaker;
   mic: Mic;
-  /** Null when declined or unavailable; the caller words its own warning. */
-  aec: Aec | null;
-  /** Capture, playback, then the AEC module — the only order that works. */
+  /** Capture first, then playback. */
   stop(): Promise<void>;
 }
 
-/** Loads AEC (when wanted), then raises the speaker and mic against its nodes. */
-export async function startAudio(
-  wantAec: boolean,
-  onChunk: (chunk: Uint8Array) => void,
-  onAecError: (error: string) => void,
-): Promise<AudioRig> {
-  let aec: Aec | null = null;
-  if (wantAec) {
-    const result = await loadAec();
-    if ("error" in result) onAecError(result.error);
-    else {
-      aec = result;
-      // The module's own death is silent otherwise: pw-record just reattaches to
-      // the raw mic, and the model starts hearing itself.
-      aec.died.then(onAecError);
-    }
-  }
-  const speaker = new Speaker({ target: aec?.sink });
-  const mic = startMic(onChunk, { target: aec?.source });
+/** Raises the speaker and mic against the default devices. */
+export function startAudio(onChunk: (chunk: Uint8Array) => void): AudioRig {
+  const speaker = new Speaker();
+  const mic = startMic(onChunk);
   return {
     speaker,
     mic,
-    aec,
     async stop() {
       await mic.stop();
       speaker.close();
-      await aec?.unload();
     },
   };
 }

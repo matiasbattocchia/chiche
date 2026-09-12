@@ -26,9 +26,8 @@ export interface Mic {
  *
  * Reads (~640 bytes each at 20 ms pipe latency) are coalesced into full
  * FRAME_BYTES frames; at most one partial frame is ever held back, and only
- * for FLUSH_MS after reads stall before a timeout sends it anyway. Noise suppression, when there
- * is any, comes from the echo-cancel module upstream (see aec.ts) rather than
- * from a filter in this pipe.
+ * for FLUSH_MS after reads stall before a timeout sends it anyway. Nothing is filtered
+ * in this pipe: the app has no echo cancellation, and expects headphones.
  */
 export function startMic(
   onChunk: (chunk: Uint8Array) => void,

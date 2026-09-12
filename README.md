@@ -8,6 +8,7 @@ conversation transcribed live. The agent speaks Spanish.
 
 - [mise](https://mise.jdx.dev) — pins Bun (and Deno, which mu still runs on) and loads `.env`
 - PipeWire (`pw-record`, `pw-play`, `pactl`)
+- **Headphones.** There is no echo cancellation; on speakers the model hears itself.
 - A `.env` with `GEMINI_API_KEY=…`
 
 ```sh
@@ -17,10 +18,9 @@ mise trust && mise install && bun install
 ## Usage
 
 ```sh
-bun start                  # two agents: voice + mu — echo cancellation on, open mic
+bun start                  # two agents: voice + mu — open mic
 bun start --no-mu          # the voice alone, no tools — the audio test bench
 bun start --ptt            # push to talk
-bun start --no-aec         # no echo cancellation (use headphones)
 ```
 
 One app, one task; flags combine. `--no-mu` leaves the voice with no tools at all.
@@ -29,10 +29,8 @@ Keys: `m` mute · `space` interrupt the model · `q` quit.
 Under `--ptt`, space holds to talk — or toggles, if the terminal doesn't report
 key releases.
 
-Echo cancellation raises PipeWire's `module-echo-cancel` in a process of its own
-(`pipewire -c aec.conf`) for the run and kills it on exit, leaving the audio graph
-as it found it. It binds to whatever the default sink is at startup, so switch
-devices *before* starting. Its log is `data/aec.log`.
+The app captures from and plays to the default PipeWire devices, so switch devices
+*before* starting. The preflight lines name them, with their volumes.
 
 ## Two agents
 
@@ -76,8 +74,6 @@ mu's daemon is raised on demand and reaps itself ~30s after the REPL detaches.
 | `metrics.ts` | the audio timeline (`data/audio.log`): mic level vs. server events |
 | `shell.ts` | terminal shell: transcript, signals, the audio rig |
 | `audio.ts` | `pw-record` capture and `pw-play` playback |
-| `aec.ts` | echo-cancel module lifecycle |
-| `aec.conf` | the module's PipeWire process — and why it is not loaded into pipewire-pulse |
 | `keys.ts` | stdin reader, kitty keyboard protocol for key releases |
 
 ## Debugging endpointing
@@ -89,7 +85,7 @@ and connection status. The terminal's `[speech end · respuesta +1.4s]` marker i
 gap between your last loud window and the model's first word.
 
 Two recordings sit beside the log on the same clock: `data/mic.wav` is exactly what
-was sent to the API (16 kHz, after the mic chain and echo cancellation, silence where
+was sent to the API (16 kHz, silence where
 the mic was muted) and `data/voz.wav` is the model's audio as it arrived (24 kHz). A
 transcript that reads nothing like what you said gets settled by ear — seek to the
 log's timestamp.
@@ -101,19 +97,14 @@ that latency is the API's.
 
 ## Notes
 
-- While echo cancellation is loaded the app forces the PipeWire graph quantum to 480
-  frames (10 ms) and restores it on exit. The WebRTC canceller only accepts 10 ms
-  blocks, and a mic-side driver running at a different quantum than the sink-side one
-  makes `module-echo-cancel` drop half the capture after any playback. The metrics
-  summary line (`mic entregó Xs en Ys`) is the check: anything under 100% means
-  samples were lost before reaching the server.
-- The module is not loaded with `pactl load-module`: inside pipewire-pulse, at
-  quantum 480, its data loop occasionally overruns rtkit's 200 ms realtime budget
-  and the kernel SIGKILLs the daemon (`RLIMIT_RTTIME`), taking the module with it a
-  few seconds into a reply — after which `pw-record` silently reattaches to the raw
-  mic. `aec.conf` runs it without realtime scheduling; if that process dies anyway
-  the app says so (`sin cancelación de eco: …`).
-
+- No echo cancellation, by decision. PipeWire's `module-echo-cancel` was tried for a
+  week (see the history on the `pipecat` branch): it lives inside the graph, so it
+  inherits the quantum, the driver pairing and rtkit's realtime budget, and any of
+  the three going wrong drops capture silently. The next attempt, if any, is an
+  in-process canceller (WebRTC AEC3 or SpeexDSP over `bun:ffi`) fed our own playback
+  as the far-end reference, so the audio backend only moves bytes.
+- The metrics summary line (`mic entregó Xs en Ys`) is the capture health check:
+  anything under 100% means samples were lost before reaching the server.
 - Audio is mono PCM s16le: 16 kHz in, 24 kHz out.
 - The import map points at the SDK's **web** build. The Node build goes through
   npm `ws` on Deno's Node TLS shim, which panics on teardown.

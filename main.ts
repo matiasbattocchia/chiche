@@ -34,7 +34,8 @@
  *   --ptt       push to talk: no automatic VAD, you open and close the turn. The default
  *               is an open mic; --ptt spares the 25 tokens/second an open mic bills for
  *               silence, and narrows the race between your turn and the injected ones.
- *   --no-aec    skip echo cancellation and use the default devices directly
+ *
+ * There is no echo cancellation: wear headphones, or the model hears itself.
  */
 // The import map points at the SDK's *web* build (`@google/genai/web`), which uses the
 // platform's native WebSocket. The default Node build goes through the npm `ws` package on
@@ -74,7 +75,6 @@ const INSTRUCTION = (await Bun.file(new URL("INSTRUCTIONS.md", import.meta.url))
 const ARGS = process.argv.slice(2);
 const MU = !ARGS.includes("--no-mu");
 const PTT = ARGS.includes("--ptt");
-const AEC = !ARGS.includes("--no-aec");
 
 /**
  * Print voice-activity markers. Outside push-to-talk they are derived from the turn
@@ -359,7 +359,7 @@ async function cleanup() {
 
 await preflight(status);
 status(`métricas → ${METRICS_FILE} · grabación → data/mic.wav, data/voz.wav`);
-const rig = await startAudio(AEC, (chunk) => {
+const rig = startAudio((chunk) => {
   const sent = session !== null && !(PTT ? !talking : muted);
   metrics.frame(chunk, sent, rig.speaker.playing);
   if (!sent) return;
@@ -367,7 +367,7 @@ const rig = await startAudio(AEC, (chunk) => {
     audio: { data: Buffer.from(chunk).toString("base64"), mimeType: "audio/pcm;rate=16000" },
   });
   conv.micChunkSent(chunk);
-}, (error) => status(`sin cancelación de eco: ${error}`));
+});
 
 onSignals(cleanup);
 
@@ -405,9 +405,7 @@ setTimeout(() => {
         : "espacio abre y cierra el turno (la terminal no reporta el soltado) · q: salir\n"
       : "m: silenciar · espacio: interrumpir · q: salir\n",
   ));
-  if (!rig.aec) {
-    out(dim("Sin cancelación de eco: usá auriculares, o el modelo se escucha a sí mismo.\n"));
-  }
+  out(dim("Sin cancelación de eco: usá auriculares, o el modelo se escucha a sí mismo.\n"));
 }, 300);
 
 while (running) {

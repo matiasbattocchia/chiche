@@ -10,7 +10,6 @@
   "scripts": {
     "start": "bun main.ts",
     "test": "bun test",
-    "test:transport": "bun tests/transport.ts",
-    "test:audio": "bun tests/audio.ts"
+    "test:transport": "bun tests/transport.ts"
   }
 }
