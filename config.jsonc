@@ -17,7 +17,7 @@
     "debounceMs": 5000
   },
   // this deployment's identity — the clock, the backlog, and every agent's defaults
-  "org": {
+  "organization": {
     // the org's clock (IANA) — every rendered stamp, cron and sleep span reads it
     "timezone": "America/Mendoza",
     // the org's locale (es_AR.UTF-8) — LANG in every agent shell and media processor, so tools and transcribers speak the org's language; unset, they inherit the harness's
@@ -25,7 +25,7 @@
     // backlog an agent inherits at boot; lower it to come up quietly
     "backlogHours": 24,
     // every agent's defaults — an agents.<name> entry re-declares these, key by key
-    "agent": {
+    "agents": {
       // the model an agent runs on
       "model": "claude-sonnet-5",
       // reasoning effort (low|medium|high|xhigh|max); null ⇒ the model decides
@@ -45,7 +45,9 @@
       // attention: how often ambient conversations are looked at — the idle cadence
       "digestMinutes": 15,
       // attention: org-clock span "from-to" the ambient world waits out; null ⇒ never sleeps
-      "sleepHours": "23-8"
+      "sleepHours": "23-8",
+      // whether a session runs for the agent; false PAUSES it — its rows still land in the log and are owed when it comes back. Here, false pauses every agent that does not say otherwise: the org's doors stay up, its minds do not
+      "mind": true
     }
   },
   // media processors — broker-side commands that derive text from bytes (§5)
@@ -55,8 +57,10 @@
   },
   // the roster: every key is an agent, its folder and its unix user
   "agents": {
-    // <name>: any org.agent key re-declared, plus identity — the principal's name (the agent goes by it) and the handles they are known by; null ⇒ not declared
-    "matias": {}
+    // <name>: any organization.agents key re-declared, plus identity — the principal's name (the agent goes by it) and the handles they are known by; null ⇒ not declared
+    "matias": {
+      "mind": true
+    }
   },
   // the connectors' knobs — a subsection per connector, validated by its owner
   "connections": {
