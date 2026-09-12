@@ -60,12 +60,18 @@ import { dim, onSignals, out, preflight, startAudio, transcript } from "./shell.
 const MODEL = "gemini-3.1-flash-live-preview";
 const VOICE = "Kore";
 const LANGUAGE = "es-AR";
+const ARGS = process.argv.slice(2);
+const MU = !ARGS.includes("--no-mu");
+const PTT = ARGS.includes("--ptt");
+
 /**
  * Silence the server's VAD waits for before committing the end of your turn. The
- * default is close to 2 s; this sits above a natural mid-sentence pause and leaves
- * the reply's first word around 1.5 s after you stop, generation included.
+ * default is close to 2 s. With an open mic this sits above a natural mid-sentence
+ * pause and leaves the reply's first word around 1.5 s after you stop, generation
+ * included. Under --ptt the key release is the end of the turn and what follows is
+ * digital silence, so the window only has to be long enough for the server to notice.
  */
-const VAD_SILENCE_MS = 700;
+const VAD_SILENCE_MS = PTT ? 200 : 700;
 
 /**
  * Agent 1's system instruction, read from INSTRUCTIONS.md beside the source at startup.
@@ -74,9 +80,6 @@ const VAD_SILENCE_MS = 700;
  */
 const INSTRUCTION = (await Bun.file(new URL("INSTRUCTIONS.md", import.meta.url)).text().catch(() => "")).trim();
 
-const ARGS = process.argv.slice(2);
-const MU = !ARGS.includes("--no-mu");
-const PTT = ARGS.includes("--ptt");
 
 /**
  * Print voice-activity markers, derived from the turn signals the server sends
