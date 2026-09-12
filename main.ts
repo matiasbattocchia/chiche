@@ -31,9 +31,11 @@
  *
  *   --no-mu     agent 1 alone, with no tools at all: a plain spoken assistant, which
  *               doubles as the test bench for the audio half
- *   --ptt       push to talk: no automatic VAD, you open and close the turn. The default
- *               is an open mic; --ptt spares the 25 tokens/second an open mic bills for
- *               silence, and narrows the race between your turn and the injected ones.
+ *   --ptt       push to talk: space gates the microphone. The stream never stops — while
+ *               the key is up the server hears silence, so its own activity detection
+ *               still finds the turn boundaries and still transcribes as you speak. What
+ *               the key buys is a quiet room: the model never hears its own reply or
+ *               your keyboard, and barge-in is a deliberate press.
  *
  * There is no echo cancellation: wear headphones, or the model hears itself.
  */
@@ -77,9 +79,8 @@ const MU = !ARGS.includes("--no-mu");
 const PTT = ARGS.includes("--ptt");
 
 /**
- * Print voice-activity markers. Outside push-to-talk they are derived from the turn
- * signals the server sends (`explicitVadSignal` only exists on Vertex); under --ptt the
- * start and end markers are exact, because we send them ourselves.
+ * Print voice-activity markers, derived from the turn signals the server sends
+ * (`explicitVadSignal` only exists on Vertex). Under --ptt the key presses print too.
  */
 const SHOW_VAD_EVENTS = true;
 
@@ -107,6 +108,8 @@ let running = true;
 let muted = false;
 /** Push-to-talk only: whether the key is currently held (or toggled on). */
 let talking = false;
+/** Push-to-talk only: what the server hears while the key is up — one silent frame. */
+const SILENCE = new Uint8Array(1280);
 
 /**
  * With mu along, each agent has ONE conversation, the way mu's log gives agent 2 one: the
@@ -214,30 +217,29 @@ const conv = createConversation({
   relayInput,
   saveHandle,
   closeSession: () => session?.close(),
-}, { ptt: PTT });
+});
 
 
 // --- Push to talk ---
 
 /**
- * Opens or closes the user's turn. With automatic VAD disabled the server has no idea
- * when we start or stop speaking, so these activity signals are the turn boundaries.
+ * Opens or closes the microphone gate. The server is not told: it keeps receiving audio
+ * either way — the room, or silence — and its activity detection ends the turn on its
+ * own, VAD_SILENCE_MS after the key goes up.
  */
 function setTalking(on: boolean) {
-  if (!PTT || on === talking || !session) return;
+  if (!PTT || on === talking) return;
   if (on) {
     talking = true;
     rig.speaker.interrupt(); // talking over the model is a barge-in
-    session.sendRealtimeInput({ activityStart: {} });
-    metrics.event("ptt activity start");
-    vadEvent("activity start");
+    metrics.event("ptt mic abierto");
+    vadEvent("mic abierto");
   } else {
-    // Flush the buffered tail while `talking` still lets it through the mic guard.
+    // Flush the buffered tail while `talking` still lets it through the gate.
     rig.mic.flush();
     talking = false;
-    session.sendRealtimeInput({ activityEnd: {} });
-    metrics.event("ptt activity end");
-    vadEvent("activity end");
+    metrics.event("ptt mic cerrado");
+    vadEvent("mic cerrado");
   }
 }
 
@@ -299,9 +301,7 @@ function connect(): Promise<{ session: Session; closed: Promise<void> }> {
         }
         : {}),
       realtimeInputConfig: {
-        automaticActivityDetection: PTT
-          ? { disabled: true }
-          : { silenceDurationMs: VAD_SILENCE_MS },
+        automaticActivityDetection: { silenceDurationMs: VAD_SILENCE_MS },
       },
     },
     callbacks: {
@@ -359,8 +359,12 @@ async function cleanup() {
 
 await preflight(status);
 status(`métricas → ${METRICS_FILE} · grabación → data/mic.wav, data/voz.wav`);
-const rig = startAudio((chunk) => {
-  const sent = session !== null && !(PTT ? !talking : muted);
+const rig = startAudio((mic) => {
+  // Under --ptt the gate swaps the room for silence but the stream goes on: the server's
+  // activity detection needs to hear the quiet to close your turn.
+  const gated = PTT && !talking;
+  const chunk = gated ? SILENCE.subarray(0, mic.length) : mic;
+  const sent = session !== null && !muted;
   metrics.frame(chunk, sent, rig.speaker.playing);
   if (!sent) return;
   session!.sendRealtimeInput({
@@ -402,7 +406,7 @@ setTimeout(() => {
     PTT
       ? holdSupported()
         ? "hablá manteniendo espacio · q: salir\n"
-        : "espacio abre y cierra el turno (la terminal no reporta el soltado) · q: salir\n"
+        : "espacio abre y cierra el micrófono (la terminal no reporta el soltado) · q: salir\n"
       : "m: silenciar · espacio: interrumpir · q: salir\n",
   ));
   out(dim("Sin cancelación de eco: usá auriculares, o el modelo se escucha a sí mismo.\n"));
@@ -422,8 +426,6 @@ while (running) {
     break;
   }
   status(resumptionHandle ? "conversación retomada" : "conectado — hablá");
-  // A reconnect mid-turn needs the open turn re-announced.
-  if (PTT && talking) session.sendRealtimeInput({ activityStart: {} });
   while (backlog.length > 0) inject(backlog.shift()!);
   conv.connectionOpened();
   await Promise.race([closed, keys]);

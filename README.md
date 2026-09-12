@@ -26,8 +26,10 @@ bun start --ptt            # push to talk
 One app, one task; flags combine. `--no-mu` leaves the voice with no tools at all.
 
 Keys: `m` mute · `space` interrupt the model · `q` quit.
-Under `--ptt`, space holds to talk — or toggles, if the terminal doesn't report
-key releases.
+Under `--ptt`, space holds the microphone open — or toggles it, if the terminal
+doesn't report key releases. The stream never stops: with the key up the server hears
+silence, so its own voice-activity detection still closes your turn and transcripts
+still arrive as you speak. The key buys a quiet room, not a different protocol.
 
 The app captures from and plays to the default PipeWire devices, so switch devices
 *before* starting. The preflight lines name them, with their volumes.
@@ -48,8 +50,8 @@ calling is not supported on this model, and a call left hanging stalls the sessi
 the send happens in the background. Inputs and outputs don't pair 1:1 — lines sent while
 mu is busy steer it, one instruction can yield many messages — so nothing of mu's, not
 even a delivery failure, travels as a tool result; it all enters agent 1's context as
-injected turns. The default is an open mic; `--ptt` spares the 25 tokens/second an open
-mic bills for silence, and narrows the race between your turn and the injected ones.
+injected turns. The default is an open mic; `--ptt` gates it behind the space bar, which
+narrows the race between your turn and the injected ones.
 
 Each agent has one conversation, not one per run. mu's is its log; the voice model's is
 the Live API session, whose resumption handle is persisted under `data/relay/` and

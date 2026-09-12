@@ -41,8 +41,6 @@ export interface Timers {
 }
 
 export interface ConversationOptions {
-  /** Push to talk: the start/end markers are the keypresses, not the server's guesses. */
-  ptt: boolean;
   timers?: Timers;
 }
 
@@ -93,7 +91,6 @@ export interface Conversation {
 }
 
 export function createConversation(io: ConversationIO, opts: ConversationOptions): Conversation {
-  const { ptt } = opts;
   const timers: Timers = opts.timers ?? {
     now: () => performance.now(),
     setTimeout: (fn, ms) => setTimeout(fn, ms),
@@ -233,10 +230,8 @@ export function createConversation(io: ConversationIO, opts: ConversationOptions
       io.speaker.interrupt();
       replyEnded();
       io.metrics.event("srv interrupted");
-      if (!ptt) {
-        io.vadEvent("speech detected · barge-in");
-        userSpeaking = true;
-      }
+      io.vadEvent("speech detected · barge-in");
+      userSpeaking = true;
     } else {
       for (const part of content.modelTurn?.parts ?? []) {
         if (part.inlineData?.data) {
@@ -256,8 +251,7 @@ export function createConversation(io: ConversationIO, opts: ConversationOptions
     if (inputText) {
       io.metrics.event(`srv input ${JSON.stringify(inputText)}`);
       if (content.inputTranscription?.text) expectReply();
-      // Under --ptt we already printed an exact start marker on the keypress.
-      if (!userSpeaking && !ptt) {
+      if (!userSpeaking) {
         io.vadEvent("speech start");
         userSpeaking = true;
       }
@@ -266,7 +260,7 @@ export function createConversation(io: ConversationIO, opts: ConversationOptions
 
     if (content.outputTranscription?.text) {
       io.metrics.event(`srv output ${JSON.stringify(content.outputTranscription.text)}`);
-      if (userSpeaking && !ptt) {
+      if (userSpeaking) {
         // The gap between your last loud window and the model's first word: the
         // endpointing latency as you experience it.
         const s = io.metrics.sinceLoud();
@@ -286,7 +280,7 @@ export function createConversation(io: ConversationIO, opts: ConversationOptions
       replyEnded();
       io.metrics.event("srv turn complete");
       io.vadEvent("turn complete");
-      if (!ptt) userSpeaking = false;
+      userSpeaking = false;
     }
   }
 

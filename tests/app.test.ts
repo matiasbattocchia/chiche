@@ -32,7 +32,7 @@ function fakeClock() {
   };
 }
 
-function harness(opts: { ptt?: boolean; mu?: boolean } = {}) {
+function harness(opts: { mu?: boolean } = {}) {
   const clock = fakeClock();
   const out = { transcript: [] as string[], markers: [] as string[], status: [] as string[], events: [] as string[],
     audioBytes: 0, interrupts: 0, toolResponses: [] as unknown[], handles: [] as string[], closed: 0, lastLoud: null as number | null };
@@ -48,7 +48,7 @@ function harness(opts: { ptt?: boolean; mu?: boolean } = {}) {
     saveHandle: (h) => out.handles.push(h),
     closeSession: () => { out.closed++; },
   };
-  const conv = createConversation(io, { ptt: opts.ptt ?? false, timers: clock });
+  const conv = createConversation(io, { timers: clock });
   return { conv, clock, out };
 }
 
@@ -159,15 +159,6 @@ describe("deaf session", () => {
     h.conv.handleMessage({ serverContent: { inputTranscription: { text: "Hola." } } });
     for (let t = DEAF_MIN_LOUD_MS + 100; t < DEAF_MIN_LOUD_MS + DEAF_QUIET_MS + 200; t += 10) { h.clock.advanceTo(t); h.conv.micChunkSent(quiet()); }
     expect(h.out.closed).toBe(0);
-  });
-});
-
-describe("push to talk", () => {
-  test("no server-derived markers", async () => {
-    const h = harness({ ptt: true });
-    replay(h, await recording("tests/fixtures/reply.jsonl"));
-    expect(h.out.markers.filter((m) => m.startsWith("speech"))).toEqual([]);
-    expect(h.out.markers).toContain("turn complete");
   });
 });
 
