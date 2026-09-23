@@ -26,10 +26,26 @@ bun start --ptt            # push to talk
 One app, one task; flags combine. `--no-mu` leaves the voice with no tools at all.
 
 Keys: `m` mute · `space` interrupt the model · `q` quit.
-Under `--ptt`, space holds the microphone open — or toggles it, if the terminal
-doesn't report key releases. The stream never stops: with the key up the server hears
-silence, so its own voice-activity detection still closes your turn and transcripts
-still arrive as you speak. The key buys a quiet room, not a different protocol.
+
+Under `--ptt` the microphone is gated. The stream never stops: with the gate shut the
+server hears silence, so its own voice-activity detection still closes your turn. The
+key buys a quiet room, not a different protocol.
+
+Two keys reach the gate. **Space** works while the terminal is focused. **F4**, the
+microphone key, works anywhere — sway grabs it and runs `ptt.sh`, which signals the
+app. Holding either one talks; a tap shorter than 400 ms latches the gate open until
+the next tap, so a player whose hands are on a game need not hold anything.
+
+The global key needs two lines in `~/.config/sway/config`, replacing whatever already
+binds `XF86AudioMicMute`:
+
+```
+bindsym --no-repeat XF86AudioMicMute exec ~/vibes/ptt.sh down
+bindsym --release   XF86AudioMicMute exec ~/vibes/ptt.sh up
+```
+
+Sway grabs the key before any client, so the game never sees it. With no app running
+`ptt.sh` falls back to muting the default source, which is what the key does normally.
 
 The app captures from and plays to the default PipeWire devices, so switch devices
 *before* starting. The preflight lines name them, with their volumes.
@@ -77,6 +93,7 @@ mu's daemon is raised on demand and reaps itself ~30s after the REPL detaches.
 | `shell.ts` | terminal shell: transcript, signals, the audio rig |
 | `audio.ts` | `pw-record` capture and `pw-play` playback |
 | `keys.ts` | stdin reader, kitty keyboard protocol for key releases |
+| `ptt.sh` | the F4 microphone key, routed to the app by signal (sway binds it) |
 
 ## Debugging endpointing
 
@@ -107,6 +124,20 @@ that latency is the API's.
   as the far-end reference, so the audio backend only moves bytes.
 - The metrics summary line (`mic entregó Xs en Ys`) is the capture health check:
   anything under 100% means samples were lost before reaching the server.
+- `thinkingConfig` is only for the models that think. `gemini-3.8-live` hangs the
+  setup silently when it is present — no error, no close, the connect just never
+  completes — because its thinking lives in the `-extended-thinking` variant. The
+  same trap caught the 2.5 models with the Gemini 3 fields.
+- Hybrid VAD buys us nothing, measured. The documented `audioStreamEnd` is meant to
+  finalise a turn without waiting for the silence window, but the gate already feeds
+  the server digital silence, and at a 200 ms window its own detection fires first.
+  Sending `audioStreamEnd` instead of silence produced no transcript and no reply at
+  all, so the gate keeps streaming quiet frames.
+- Interim transcripts do not exist on the voice models. Measured on both
+  `gemini-3.1-flash-live-preview` and `gemini-3.8-live`: zero
+  `interimInputTranscription` messages, in automatic and manual activity modes alike.
+  Only `gemini-3.5-transcribe-live` emits them, and it refuses an audio response, so
+  live captions would mean a second session fed the same microphone.
 - Audio is mono PCM s16le: 16 kHz in, 24 kHz out.
 - The import map points at the SDK's **web** build. The Node build goes through
   npm `ws` on Deno's Node TLS shim, which panics on teardown.

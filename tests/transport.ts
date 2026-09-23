@@ -50,8 +50,11 @@ async function once(i: number): Promise<Run> {
       systemInstruction: { parts: [{ text: INSTRUCTION }] },
       // languageCode, like thinkingLevel, is a Gemini 3 field: a 2.5 setup carrying it never completes
       speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } }, ...(MODEL.includes("gemini-3") ? { languageCode: "es-AR" } : {}) },
-      // thinkingLevel is a Gemini 3 knob: a 2.5 setup carrying it never completes (silently)
-      ...(MODEL.includes("gemini-3") ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } : {}),
+      // thinkingLevel is for the models that think: 2.5 and gemini-3.8-live both hang the
+      // setup silently when it is present, and 3.8's thinking lives in its own variant.
+      ...(MODEL.includes("gemini-3.1") || MODEL.includes("thinking")
+        ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } }
+        : {}),
       inputAudioTranscription: {}, outputAudioTranscription: {},
       contextWindowCompression: { slidingWindow: {} },
       sessionResumption: {},

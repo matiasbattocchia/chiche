@@ -31,11 +31,17 @@
  *
  *   --no-mu     agent 1 alone, with no tools at all: a plain spoken assistant, which
  *               doubles as the test bench for the audio half
- *   --ptt       push to talk: space gates the microphone. The stream never stops — while
- *               the key is up the server hears silence, so its own activity detection
- *               still finds the turn boundaries and still transcribes as you speak. What
- *               the key buys is a quiet room: the model never hears its own reply or
- *               your keyboard, and barge-in is a deliberate press.
+ *   --ptt       push to talk: a key gates the microphone. The stream never stops — while
+ *               the gate is shut the server hears silence, so its own activity detection
+ *               still finds the turn boundaries. What the key buys is a quiet room: the
+ *               model never hears its own reply or your keyboard, and barge-in is a
+ *               deliberate press.
+ *
+ *               Two keys reach the gate. The space bar works while the terminal has
+ *               focus. The microphone key (F4) works anywhere, because sway grabs it and
+ *               runs ptt.sh, which signals us: SIGUSR1 down, SIGUSR2 up. Holding talks;
+ *               a tap shorter than LATCH_MS leaves the gate open until the next tap, so
+ *               a player whose hands are on a game need not hold anything.
  *
  * There is no echo cancellation: wear headphones, or the model hears itself.
  */
@@ -57,7 +63,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { openMetrics } from "./metrics.ts";
 import { dim, onSignals, out, preflight, startAudio, transcript } from "./shell.ts";
 
-const MODEL = "gemini-3.1-flash-live-preview";
+const MODEL = "gemini-3.8-live";
 const VOICE = "Kore";
 const LANGUAGE = "es-AR";
 const ARGS = process.argv.slice(2);
@@ -113,6 +119,13 @@ let muted = false;
 let talking = false;
 /** Push-to-talk only: what the server hears while the key is up — one silent frame. */
 const SILENCE = new Uint8Array(1280);
+/** A press shorter than this is a tap, and a tap latches the gate open. */
+const LATCH_MS = 400;
+/** Push-to-talk only: the gate is held open by a tap rather than by the key. */
+let latched = false;
+let pressedAt = 0;
+/** Where ptt.sh looks for us. Runtime state, so it belongs under the runtime dir. */
+const PID_FILE = `${process.env.XDG_RUNTIME_DIR ?? "/tmp"}/vibes-ptt.pid`;
 
 /**
  * With mu along, each agent has ONE conversation, the way mu's log gives agent 2 one: the
@@ -226,6 +239,33 @@ const conv = createConversation({
 // --- Push to talk ---
 
 /**
+ * The gate's two edges, shared by the space bar and the microphone key.
+ *
+ * Holding talks. A tap — down and up inside LATCH_MS — leaves the gate open instead, and
+ * the next press closes it. That is the shape a kid testing a game needs: both hands stay
+ * on the game, and one tap each way opens and closes the microphone.
+ */
+function gateDown() {
+  if (latched) {
+    latched = false;
+    setTalking(false);
+    return;
+  }
+  pressedAt = Date.now();
+  setTalking(true);
+}
+
+function gateUp() {
+  if (!talking) return;
+  if (Date.now() - pressedAt < LATCH_MS) {
+    latched = true; // a tap: the gate stays open, and says so
+    vadEvent("mic trabado — tocá de nuevo para cerrar");
+    return;
+  }
+  setTalking(false);
+}
+
+/**
  * Opens or closes the microphone gate. The server is not told: it keeps receiving audio
  * either way — the room, or silence — and its activity detection ends the turn on its
  * own, VAD_SILENCE_MS after the key goes up.
@@ -273,7 +313,11 @@ function connect(): Promise<{ session: Session; closed: Promise<void> }> {
         // is the one lever the API offers to steady it.
         languageCode: LANGUAGE,
       },
-      thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+      // Only the thinking models take this; gemini-3.8-live hangs the setup, silently,
+      // when it is present — its thinking lives in the -extended-thinking variant.
+      ...(MODEL.includes("gemini-3.1") || MODEL.includes("thinking")
+        ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } }
+        : {}),
       inputAudioTranscription: {},
       outputAudioTranscription: {},
       // Without compression the session dies after 15 minutes of audio.
@@ -327,8 +371,8 @@ function onKey(event: { code: number; ctrl: boolean; type: string }): boolean | 
 
   if (PTT) {
     if (event.code !== KEY_SPACE) return;
-    // With release events we get real hold-to-talk; without them, space toggles.
-    if (holdSupported()) setTalking(pressed);
+    // With release events we get both edges; without them, space can only toggle.
+    if (holdSupported()) pressed ? gateDown() : gateUp();
     else if (pressed) setTalking(!talking);
     return;
   }
@@ -351,6 +395,7 @@ async function cleanup() {
   if (cleanedUp) return;
   cleanedUp = true;
   mu?.close(); // detaching is what ends mu: its daemon reaps itself a linger later
+  await rm(PID_FILE, { force: true }).catch(() => {});
   await rig.stop();
   out(dim(`· ${metrics.close()}
 `));
@@ -377,6 +422,15 @@ const rig = startAudio((mic) => {
 });
 
 onSignals(cleanup);
+
+// The microphone key, wherever the focus is. Sway grabs F4 and runs ptt.sh, which finds
+// us through this file and signals the gate's two edges. Written after the rig exists, so
+// a signal arriving early cannot reach a gate that is not built yet.
+if (PTT) {
+  await Bun.write(PID_FILE, String(process.pid));
+  process.on("SIGUSR1", gateDown);
+  process.on("SIGUSR2", gateUp);
+}
 
 out(dim(`Live API · ${MODEL}${MU ? " + mu" : ""}\n`));
 
