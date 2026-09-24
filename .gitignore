@@ -9,3 +9,6 @@ data/agents/*/*
 !data/agents/*/instructions/
 !data/agents/*/skills/
 !data/agents/*/bin/
+
+# voice clips stay local
+tests/fixtures/*.raw

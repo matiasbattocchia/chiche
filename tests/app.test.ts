@@ -2,7 +2,7 @@
  * tests/app.test.ts — the application layer alone: no socket, no PipeWire.
  *
  * Drives conversation.ts with a recorded server message stream (tests/transport.ts
- * --record) on a fake clock, and with hand-made messages for the cases a recording
+ * --record, its audio zeroed) on a fake clock, and with hand-made messages for the cases a recording
  * doesn't cover. What comes out is what the user would see and hear: the transcript,
  * the markers, the speaker's bytes, the tool answers.
  *

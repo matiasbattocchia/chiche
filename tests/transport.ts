@@ -9,13 +9,14 @@
  *   time to first audio, chunk cadence, total audio received, empty turns,
  *   goAway/errors — and bytes per second actually arriving on the socket.
  *
- *   bun tests/transport.ts [runs=3] [fixture=tests/fixtures/hola.raw]
+ *   bun tests/transport.ts <runs> <clip>   — the clip: 16 kHz s16le mono raw, your own voice
  */
 import { GoogleGenAI, type LiveServerMessage, Modality, ThinkingLevel } from "@google/genai/web";
 
 const MODEL = process.env.MODEL ?? "gemini-3.1-flash-live-preview";
 const RUNS = parseInt(process.argv[2] ?? "3", 10);
-const FIXTURE = process.argv[3] ?? "tests/fixtures/session0-12.raw";
+const FIXTURE = process.argv[3];
+if (!FIXTURE) { console.error("uso: bun tests/transport.ts <runs> <clip 16 kHz s16le mono .raw>"); process.exit(1); }
 /** `--record <file>`: every server message as JSONL {t, msg}, t in ms since connect — tests/app.ts replays it. */
 const RECORD = process.argv.includes("--record") ? process.argv[process.argv.indexOf("--record") + 1] : null;
 const CHUNK = 320; // 10 ms of 16 kHz s16 mono, the app's send cadence
