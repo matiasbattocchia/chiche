@@ -1,0 +1,486 @@
+#!/usr/bin/env -S deno run -A --no-config
+// game — make, check, run and publish the org's Phaser games. `game help` lists the verbs.
+import { chromium } from "npm:playwright-core@1.63.0";
+import { serveDir } from "jsr:@std/http@1/file-server";
+import { copy, exists } from "jsr:@std/fs@1";
+import { basename, join, relative } from "jsr:@std/path@1";
+
+// the stack (kit, template, deno.json) lives here; the games are a repo of their own
+const ORG = join(import.meta.dirname!, "..");
+const CONFIG = join(ORG, "deno.json");
+const KIT = join(ORG, "kit");
+const GAMES = Deno.env.get("GAMES_DIR") ?? join(ORG, "games");
+const PORT = Number(Deno.env.get("GAME_PORT") ?? 7357);
+const NOT_GAMES = new Set(["assets"]);
+
+const HELP = `game — the org's Phaser games, under ${GAMES}
+
+  game new <slug>            copy the template into <slug>/
+  game check [slug]          deno check + deno lint (every game when no slug)
+  game build <slug>          bundle into <slug>/dist/
+  game serve                 dev server on :${PORT}, every game at /<slug>/; rebuilds and
+                             reloads the page on every save, keeping the kid's progress
+  game run <slug> [options]  build, open in headless Chromium, report what happened
+      --for <s>              seconds to watch after the steps (default 2)
+      --keys "<steps>"       space-separated: Right:800 (hold ms) · Space (tap) ·
+                             wait:500 · click:480,300 (game coords) · shot (screenshot)
+      --eval <expr>          evaluate at the end and print as JSON (repeatable)
+      --state <json|file>    the save to start from (kit.save: scene, data, difficulty)
+      --query <q>            extra URL query, e.g. "debug=1&seed=7"
+      --size <WxH>           viewport (default 960x540)
+  game publish [slug]        add or update <slug> on the site and deploy it; without a
+                             slug, redeploy every published game
+  game docs [topic [file]]   Phaser 4's own guides: the topics, one topic, or a reference`;
+
+// ── helpers ─────────────────────────────────────────────────────────────────
+
+function fail(msg: string): never {
+  console.error(msg);
+  Deno.exit(1);
+}
+
+async function sh(cmd: string[], opts: { cwd?: string; quiet?: boolean } = {}) {
+  const out = await new Deno.Command(cmd[0], {
+    args: cmd.slice(1),
+    cwd: opts.cwd ?? GAMES,
+    stdout: "piped",
+    stderr: "piped",
+  }).output();
+  const text = new TextDecoder().decode(out.stdout) + new TextDecoder().decode(out.stderr);
+  // deno colors its output even into a pipe; the reader is a model, not a terminal
+  const plain = text.replace(/\x1b\[[0-9;]*m/g, "");
+  if (!opts.quiet && plain.trim()) console.log(plain.trimEnd());
+  return { ok: out.success, text: plain };
+}
+
+async function gameDir(slug: string | undefined) {
+  if (!slug) fail("which game? `game help`");
+  const dir = join(GAMES, slug);
+  if (!(await exists(join(dir, "main.ts")))) fail(`no game called ${slug} (no ${dir}/main.ts)`);
+  return dir;
+}
+
+async function slugs() {
+  const all: string[] = [];
+  for await (const e of Deno.readDir(GAMES)) {
+    if (e.isDirectory && !NOT_GAMES.has(e.name) && !e.name.startsWith(".") &&
+      await exists(join(GAMES, e.name, "main.ts"))) all.push(e.name);
+  }
+  return all.sort();
+}
+
+async function readMeta(slug: string) {
+  return JSON.parse(await Deno.readTextFile(join(GAMES, slug, "game.json")));
+}
+
+// ── build ───────────────────────────────────────────────────────────────────
+
+/** Bundle a game into `out`: main.js, index.html, assets/. Unminified unless publishing. */
+async function build(slug: string, out = join(GAMES, slug, "dist"), minify = false) {
+  const dir = await gameDir(slug);
+  const t0 = performance.now();
+  await Deno.remove(out, { recursive: true }).catch(() => {});
+  await Deno.mkdir(out, { recursive: true });
+  const cmd = ["deno", "bundle", "--config", CONFIG, "--platform", "browser", "-o", join(out, "main.js"), join(dir, "main.ts")];
+  if (minify) cmd.splice(2, 0, "--minify");
+  const r = await sh(cmd, { quiet: true });
+  if (!r.ok) return { ok: false, text: r.text };
+  await Deno.copyFile(join(dir, "index.html"), join(out, "index.html"));
+  if (await exists(join(dir, "assets"))) await copy(join(dir, "assets"), join(out, "assets"));
+  return { ok: true, text: `built ${slug} in ${Math.round(performance.now() - t0)} ms` };
+}
+
+// ── check ───────────────────────────────────────────────────────────────────
+
+async function check(slug?: string) {
+  const targets = slug ? [await gameDir(slug)] : (await slugs()).map((s) => join(GAMES, s));
+  const files = [...targets.map((d) => join(d, "main.ts")), join(KIT, "mod.ts")];
+  const types = await sh(["deno", "check", "--config", CONFIG, ...files]);
+  const lint = await sh(["deno", "lint", "--config", CONFIG, ...targets, KIT]);
+  if (!types.ok || !lint.ok) Deno.exit(1);
+}
+
+// ── run ─────────────────────────────────────────────────────────────────────
+
+async function chromiumPath() {
+  const env = Deno.env.get("GAME_CHROMIUM");
+  if (env) return env;
+  if (await exists("/usr/bin/chromium")) return "/usr/bin/chromium";
+  const cache = join(Deno.env.get("HOME")!, ".cache/ms-playwright");
+  const found: string[] = [];
+  if (await exists(cache)) {
+    for await (const e of Deno.readDir(cache)) {
+      if (e.name.startsWith("chromium_headless_shell-")) {
+        found.push(join(cache, e.name, "chrome-headless-shell-linux64/chrome-headless-shell"));
+      }
+    }
+  }
+  return found.sort().at(-1) ?? fail("no Chromium: set GAME_CHROMIUM");
+}
+
+function serveGame(slug: string, root: string, port = 0) {
+  return Deno.serve({ hostname: "127.0.0.1", port, onListen() {} }, (req) =>
+    serveDir(req, { fsRoot: root, urlRoot: slug, quiet: true }));
+}
+
+type Flags = { for: number; keys: string; eval: string[]; state?: string; query: string; size: string };
+
+function parseFlags(args: string[]): Flags {
+  const f: Flags = { for: 2, keys: "", eval: [], query: "", size: "960x540" };
+  for (let i = 0; i < args.length; i++) {
+    const [flag, value] = [args[i], args[i + 1]];
+    if (value === undefined) fail(`${flag} needs a value`);
+    i++;
+    if (flag === "--for") f.for = Number(value);
+    else if (flag === "--keys") f.keys = value;
+    else if (flag === "--eval") f.eval.push(value);
+    else if (flag === "--state") f.state = value;
+    else if (flag === "--query") f.query = value;
+    else if (flag === "--size") f.size = value;
+    else fail(`unknown option ${flag}`);
+  }
+  return f;
+}
+
+const KEY_ALIASES: Record<string, string> = {
+  Right: "ArrowRight", Left: "ArrowLeft", Up: "ArrowUp", Down: "ArrowDown", Esc: "Escape",
+};
+
+// Evaluated in the page: JSON that survives Phaser's cycles and depth.
+const SAFE_JSON = `(v) => { const seen = new WeakSet();
+  const walk = (x, d) => {
+    if (x === null || typeof x !== "object") return typeof x === "function" ? undefined : x;
+    if (seen.has(x)) return "[cycle]"; seen.add(x);
+    if (d > 3) return Array.isArray(x) ? "[array " + x.length + "]" : "[object]";
+    if (Array.isArray(x)) return x.slice(0, 50).map((y) => walk(y, d + 1));
+    const o = {}; for (const k of Object.keys(x).slice(0, 60)) o[k] = walk(x[k], d + 1); return o;
+  };
+  return JSON.stringify(walk(v, 0)); }`;
+
+async function run(slug: string, args: string[]) {
+  const f = parseFlags(args);
+  const b = await build(slug);
+  if (!b.ok) fail(`build failed:\n${b.text}`);
+
+  const server = serveGame(slug, join(GAMES, slug, "dist"));
+  const [w, h] = f.size.split("x").map(Number);
+  const browser = await chromium.launch({
+    executablePath: await chromiumPath(),
+    args: ["--autoplay-policy=no-user-gesture-required", "--enable-unsafe-swiftshader"],
+  });
+  const page = await browser.newPage({ viewport: { width: w, height: h } });
+  let state = f.state;
+  if (state && !state.trimStart().startsWith("{")) state = await Deno.readTextFile(state);
+  await page.addInitScript(([key, save]) => {
+    (globalThis as { __DEV__?: boolean }).__DEV__ = true;
+    if (save) localStorage.setItem(key, save);
+  }, [`game:${slug}`, state ?? ""]);
+
+  const errors: string[] = [], warnings: string[] = [], logs = new Map<string, number>();
+  page.on("pageerror", (e) => errors.push(`uncaught ${e.stack ?? e.message}`));
+  page.on("console", (m) => {
+    let text = m.text();
+    if (/GL Driver Message/.test(text)) return; // Chromium's GPU chatter, never the game's
+    if (text.startsWith("Failed to load resource")) text += ` ${new URL(m.location().url).pathname}`;
+    if (m.type() === "error") errors.push(text);
+    else if (m.type() === "warning") warnings.push(text);
+    else logs.set(text, (logs.get(text) ?? 0) + 1);
+  });
+
+  const dir = join(GAMES, slug, ".shots");
+  await Deno.remove(dir, { recursive: true }).catch(() => {});
+  await Deno.mkdir(dir, { recursive: true });
+  const shots: string[] = [];
+  const shot = async () => {
+    const path = join(dir, `${shots.length + 1}.png`);
+    await page.screenshot({ path });
+    shots.push(relative(Deno.cwd(), path));
+  };
+
+  const port = server.addr.port;
+  await page.goto(`http://127.0.0.1:${port}/${slug}/${f.query ? `?${f.query}` : ""}`);
+  const booted = await page.waitForFunction(() => {
+    const g = (globalThis as { game?: { isBooted: boolean } }).game;
+    return g?.isBooted;
+  }, null, { timeout: 8000 }).then(() => true, () => false);
+
+  if (booted) {
+    for (const step of f.keys.split(/\s+/).filter(Boolean)) {
+      const [name, arg] = step.split(":");
+      if (name === "wait") await page.waitForTimeout(Number(arg));
+      else if (name === "shot") await shot();
+      else if (name === "click") {
+        const [x, y] = arg.split(",").map(Number);
+        const at = await page.evaluate(([x, y]) => {
+          const g = (globalThis as any).game;
+          const r = g.canvas.getBoundingClientRect();
+          return [r.left + x * r.width / g.scale.width, r.top + y * r.height / g.scale.height];
+        }, [x, y]);
+        await page.mouse.click(at[0], at[1]);
+      } else {
+        const key = KEY_ALIASES[name] ?? name;
+        if (arg) {
+          await page.keyboard.down(key);
+          await page.waitForTimeout(Number(arg));
+          await page.keyboard.up(key);
+        } else await page.keyboard.press(key);
+      }
+    }
+    await page.waitForTimeout(f.for * 1000);
+  }
+  await shot();
+
+  const summary = booted
+    ? await page.evaluate(() => {
+      const g = (globalThis as any).game, kit = (globalThis as any).kit;
+      const d = kit?.difficulty;
+      return {
+        fps: Math.round(g.loop.actualFps),
+        renderer: g.renderer.type === 2 ? "webgl" : "canvas",
+        scenes: g.scene.getScenes(true).map((s: any) => s.scene.key).join(" "),
+        difficulty: d && (d.rate === null ? `level ${d.level.toFixed(2)}, no tries yet` :
+          `level ${d.level.toFixed(2)}, ${Math.round(d.rate * 100)}% success over ${kit.save.difficulty.recent.length} tries`),
+      };
+    })
+    : null;
+  const evals: string[] = [];
+  for (const expr of f.eval) {
+    const v = await page.evaluate(`(${SAFE_JSON})((() => (${expr}))())`).catch((e) => `error: ${e.message}`);
+    evals.push(`${expr} = ${v}`);
+  }
+  await browser.close();
+  await server.shutdown();
+
+  console.log(b.text);
+  if (!booted) errors.unshift("the game never booted (no window.game.isBooted after 8 s)");
+  if (summary) {
+    console.log(`${summary.renderer}, ${summary.fps} fps · scenes: ${summary.scenes || "none"}`);
+    if (summary.difficulty) console.log(`difficulty: ${summary.difficulty}`);
+  }
+  const section = (title: string, lines: string[]) => {
+    if (!lines.length) return;
+    console.log(`\n${title} (${lines.length}):`);
+    for (const l of lines.slice(0, 40)) console.log(`  ${l.replaceAll("\n", "\n    ")}`);
+    if (lines.length > 40) console.log(`  … ${lines.length - 40} more`);
+  };
+  section("ERRORS", errors);
+  section("warnings", warnings);
+  section("console", [...logs].map(([t, n]) => n > 1 ? `${t}  ×${n}` : t));
+  section("eval", evals);
+  console.log(`\nscreenshots: ${shots.join(" ")}`);
+  if (errors.length) Deno.exit(1);
+}
+
+// ── serve ───────────────────────────────────────────────────────────────────
+
+const RELOAD = `<script>globalThis.__DEV__ = true;
+new EventSource("/__reload?game=" + location.pathname.split("/")[1]).onmessage = () => location.reload();
+</script>`;
+
+async function serve() {
+  const ours = await fetch(`http://127.0.0.1:${PORT}/__serve`).then((r) => r.text(), () => null);
+  if (ours === "game serve") return console.log(`already running: http://localhost:${PORT}/`);
+  if (ours !== null) fail(`port ${PORT} is taken by something else: GAME_PORT=<other> game serve`);
+
+  const clients = new Map<string, Set<ReadableStreamDefaultController>>();
+  const reload = (slug: string) => {
+    for (const c of clients.get(slug) ?? []) c.enqueue(new TextEncoder().encode("data: reload\n\n"));
+  };
+  const rebuild = async (slug: string) => {
+    const r = await build(slug);
+    // a broken build leaves the old one playing: the kid never sees a crash
+    if (r.ok) reload(slug);
+    console.log(`${new Date().toLocaleTimeString()} ${r.ok ? r.text : `BUILD FAILED ${slug}:\n${r.text}`}`);
+  };
+  for (const s of await slugs()) await rebuild(s);
+
+  Deno.serve({ port: PORT, onListen: () => console.log(`http://localhost:${PORT}/`) }, async (req) => {
+    const url = new URL(req.url);
+    if (url.pathname === "/__serve") return new Response("game serve");
+    if (url.pathname === "/__reload") {
+      const slug = url.searchParams.get("game") ?? "";
+      let me: ReadableStreamDefaultController;
+      return new Response(
+        new ReadableStream({
+          start(c) {
+            me = c;
+            if (!clients.has(slug)) clients.set(slug, new Set());
+            clients.get(slug)!.add(c);
+          },
+          cancel() {
+            clients.get(slug)?.delete(me);
+          },
+        }),
+        { headers: { "content-type": "text/event-stream", "cache-control": "no-store" } },
+      );
+    }
+    const slug = url.pathname.split("/")[1];
+    if (!slug) {
+      const list = await Promise.all((await slugs()).map(async (s) => {
+        const m = await readMeta(s);
+        return `<li><a href="/${s}/">${m.emoji} ${m.title}</a></li>`;
+      }));
+      return new Response(`<meta charset="utf-8"><ul style="font:24px system-ui">${list.join("")}</ul>`, {
+        headers: { "content-type": "text/html" },
+      });
+    }
+    const res = await serveDir(req, { fsRoot: join(GAMES, slug, "dist"), urlRoot: slug, quiet: true });
+    res.headers.set("cache-control", "no-store");
+    if (!res.headers.get("content-type")?.startsWith("text/html")) return res;
+    const html = (await res.text()).replace("<head>", `<head>${RELOAD}`);
+    return new Response(html, { status: res.status, headers: res.headers });
+  });
+
+  let pending = new Set<string>();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  for await (const ev of Deno.watchFs([GAMES, KIT])) {
+    for (const path of ev.paths) {
+      const parts = relative(GAMES, path).split("/");
+      if (parts.some((p) => p === "dist" || (p.startsWith(".") && p !== ".."))) continue;
+      if (!relative(KIT, path).startsWith("..")) (await slugs()).forEach((s) => pending.add(s));
+      else if ((await slugs()).includes(parts[0])) pending.add(parts[0]);
+    }
+    if (!pending.size) continue;
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const todo = pending;
+      pending = new Set();
+      for (const s of todo) await rebuild(s);
+    }, 200);
+  }
+}
+
+// ── publish ─────────────────────────────────────────────────────────────────
+
+async function publish(slug?: string) {
+  if (!(await exists(join(GAMES, "wrangler.jsonc")))) {
+    fail(`no ${join(GAMES, "wrangler.jsonc")}: write one naming the site, like
+{ "name": "<site>", "compatibility_date": "${new Date().toISOString().slice(0, 10)}", "assets": { "directory": ".site" } }`);
+  }
+  if (slug) {
+    await gameDir(slug);
+    const meta = await readMeta(slug);
+    if (!meta.published) {
+      meta.published = new Date().toISOString().slice(0, 10);
+      await Deno.writeTextFile(join(GAMES, slug, "game.json"), JSON.stringify(meta, null, 2) + "\n");
+    }
+  }
+  const site = join(GAMES, ".site");
+  await Deno.remove(site, { recursive: true }).catch(() => {});
+  const cards: string[] = [];
+  for (const s of await slugs()) {
+    const meta = await readMeta(s);
+    if (!meta.published) continue;
+    const r = await build(s, join(site, s), true);
+    if (!r.ok) fail(`build failed for ${s}, nothing deployed:\n${r.text}`);
+    console.log(r.text);
+    cards.push(`<a href="./${s}/"><span>${meta.emoji}</span><b>${meta.title}</b><i>${meta.description}</i></a>`);
+  }
+  if (!cards.length) fail("nothing published yet: `game publish <slug>`");
+  await Deno.writeTextFile(join(site, "index.html"), indexPage(cards));
+
+  // games/wrangler.jsonc names the Worker (its address) and points it at .site/
+  const r = await sh(["deno", "run", "-A", "npm:wrangler@4", "deploy"], { quiet: true });
+  if (!r.ok) fail(`deploy failed:\n${r.text}`);
+  const home = r.text.match(/https:\/\/\S+\.workers\.dev/)?.[0] ?? "(see wrangler output)";
+  console.log(`deployed ${cards.length} game(s) to ${home}/`);
+  if (slug) console.log(`  ${slug}: ${home}/${slug}/`);
+}
+
+function indexPage(cards: string[]) {
+  return `<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🎮 Juegos</title>
+<style>
+  body { margin: 0; min-height: 100vh; background: #081c15; color: #fff; font-family: system-ui, sans-serif; }
+  h1 { text-align: center; font-size: 56px; margin: 32px 16px; }
+  main { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; padding: 0 20px 40px; }
+  a { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px 16px; border-radius: 24px;
+      background: #2d6a4f; color: inherit; text-decoration: none; text-align: center; }
+  a:hover { background: #40916c; transform: scale(1.03); }
+  span { font-size: 96px; line-height: 1; }
+  b { font-size: 28px; }
+  i { font-style: normal; opacity: .8; }
+</style></head>
+<body><h1>🎮 Juegos</h1><main>
+${cards.join("\n")}
+</main></body></html>
+`;
+}
+
+// ── docs ────────────────────────────────────────────────────────────────────
+
+async function docs(topic?: string, file?: string) {
+  const config = JSON.parse(await Deno.readTextFile(CONFIG));
+  const version = (config.imports.phaser as string).split("@").at(-1)!;
+  const info = JSON.parse((await sh(["deno", "info", "--json"], { cwd: ORG, quiet: true })).text);
+  const skills = join(info.npmCache, "registry.npmjs.org/phaser", version, "skills");
+  if (!(await exists(skills))) await sh(["deno", "install"], { cwd: ORG });
+  if (!topic) {
+    const entries = [];
+    for await (const e of Deno.readDir(skills)) {
+      const text = await Deno.readTextFile(join(skills, e.name, "SKILL.md"));
+      const desc = text.match(/description: "?(.*?)(?: Triggers on:|"?\n)/)?.[1] ?? "";
+      entries.push(`${e.name.padEnd(26)} ${desc.replace(/^Use this skill when /, "")}`);
+    }
+    console.log(`Phaser ${version} guides — game docs <topic>\n\n${entries.sort().join("\n")}`);
+    return;
+  }
+  const dir = join(skills, topic);
+  if (!(await exists(dir))) fail(`no topic ${topic}: \`game docs\` lists them`);
+  if (file) return console.log(await Deno.readTextFile(join(dir, "references", basename(file))));
+  console.log(await Deno.readTextFile(join(dir, "SKILL.md")));
+  if (await exists(join(dir, "references"))) {
+    const refs = [];
+    for await (const e of Deno.readDir(join(dir, "references"))) refs.push(e.name);
+    console.log(`\nreferences — game docs ${topic} <file>: ${refs.sort().join(" ")}`);
+  }
+}
+
+// ── new ─────────────────────────────────────────────────────────────────────
+
+async function create(slug?: string) {
+  if (!slug || !/^[a-z0-9][a-z0-9-]*$/.test(slug)) fail("game new <slug>: lowercase letters, digits and dashes");
+  const dir = join(GAMES, slug);
+  if (await exists(dir)) fail(`${slug} already exists`);
+  if (!(await exists(GAMES))) {
+    // the first game starts the games repo
+    await Deno.mkdir(GAMES, { recursive: true });
+    await Deno.writeTextFile(join(GAMES, ".gitignore"), "dist/\n.site/\n.shots/\n.wrangler/\nnode_modules/\n");
+    await sh(["git", "init", "-q", "-b", "main"]);
+    console.log(`${GAMES}: a new git repo for the games`);
+  }
+  await copy(join(ORG, "template"), dir);
+  for (const junk of ["dist", ".shots"]) await Deno.remove(join(dir, junk), { recursive: true }).catch(() => {});
+  const rel = relative(Deno.cwd(), dir);
+  console.log(`${rel && !rel.startsWith("..") ? rel : dir}: game.json, index.html, main.ts, assets/ — the template's
+star-catcher. Rewrite game.json (title, emoji, description, prizes) and Play.`);
+}
+
+// ── main ────────────────────────────────────────────────────────────────────
+
+const [verb, ...rest] = Deno.args;
+if (!["new", "docs", "help", "-h", "--help", undefined].includes(verb) && !(await exists(GAMES))) {
+  fail(`no games at ${GAMES} yet: \`game new <slug>\` starts them there (or set GAMES_DIR)`);
+}
+switch (verb) {
+  case "new": await create(rest[0]); break;
+  case "check": await check(rest[0]); break;
+  case "build": {
+    const r = await build(rest[0]);
+    console.log(r.text);
+    if (!r.ok) Deno.exit(1);
+    break;
+  }
+  case "serve": await serve(); break;
+  case "run": {
+    if (!rest[0] || rest[0].startsWith("-")) fail("game run <slug> [options]");
+    await run(rest[0], rest.slice(1));
+    break;
+  }
+  case "publish": await publish(rest[0]); break;
+  case "docs": await docs(rest[0], rest[1]); break;
+  case undefined: case "help": case "-h": case "--help": console.log(HELP); break;
+  default: fail(`unknown verb ${verb}\n\n${HELP}`);
+}

@@ -1,0 +1,10 @@
+{
+  "imports": {
+    "phaser": "npm:phaser@4.2.1",
+    "kit": "./kit/mod.ts"
+  },
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable", "esnext", "deno.ns"]
+  },
+  "nodeModulesDir": "none"
+}

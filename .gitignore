@@ -1,3 +1,11 @@
 .env
 node_modules/
-data/
+# data/ is the agents' volume: track what they are, not what they did
+data/log/
+data/relay/
+data/system/
+data/organization/games/
+data/agents/*/*
+!data/agents/*/instructions/
+!data/agents/*/skills/
+!data/agents/*/bin/
