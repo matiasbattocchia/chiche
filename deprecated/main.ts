@@ -10,19 +10,23 @@
  * ends. The channel between them is one tool and two kinds of injection:
  *
  *   input(text)         fire and forget: the tool is answered on the spot with a canned
- *                       ack, and the send happens in the background. Async function
- *                       calling is not supported on this model — the docs are explicit —
- *                       so the call must never be left hanging; and inputs and outputs
- *                       don't pair 1:1 anyway (lines sent while mu is busy steer it; one
- *                       instruction can yield many messages), so nothing of mu's — not
- *                       even a delivery failure — comes back as the tool result. All of
- *                       it enters agent 1's context directly, out of band.
+ *                       ack, and the send happens in the background. The tool is declared
+ *                       BLOCKING on purpose — gemini-3.8-live defaults to async function
+ *                       calling, whose one response per call is the wrong shape here:
+ *                       inputs and outputs don't pair 1:1 (lines sent while mu is busy
+ *                       steer it; one instruction can yield many messages), so nothing of
+ *                       mu's — not even a delivery failure — comes back as the tool
+ *                       result. All of it enters agent 1's context directly, out of band.
  *
  *   activity            `sendClientContent` with turnComplete:false — context accrues and
  *                       NOTHING is generated. Agent 1 learns mu is compiling, and stays
  *                       quiet about it until asked ("¿por qué tarda?" — "seguí esperando").
+ *                       Stamped with seconds since the work began, since agent 1 has no
+ *                       clock and cannot otherwise tell a fresh build from a stuck one.
  *
- *   final / error       the same, with turnComplete:true, which is what makes it speak.
+ *   final / error       the same, with turnComplete:true — which is what makes it speak —
+ *                       but only onto a free floor: held while the model speaks, accrued
+ *                       while the user does. See `flushNews`.
  *
  * Injected turns carry the `user` role because it is the only role available: `model`
  * would be forging agent 1's own voice, and there is no mid-session `system` turn. The
@@ -49,6 +53,7 @@ import {
   Modality,
   type Session,
   ThinkingLevel,
+  Behavior,
   Type,
 } from "@google/genai";
 import { readKeys, restoreKeyboard } from "./keys.ts";
@@ -56,7 +61,7 @@ import type { Mu, MuUpdate } from "./mu.ts";
 import { createConversation } from "./conversation.ts";
 import { mkdir, rm } from "node:fs/promises";
 import { openMetrics } from "./metrics.ts";
-import { dim, onSignals, out, preflight, startAudio, transcript } from "./shell.ts";
+import { dim, onSignals, out, preflight, startAudio, toggleSourceMute, transcript } from "./shell.ts";
 
 const MODEL = "gemini-3.8-live";
 const VOICE = "Kore";
@@ -109,7 +114,6 @@ function vadEvent(text: string) {
 
 let session: Session | null = null;
 let running = true;
-let muted = false;
 
 
 /**
@@ -151,39 +155,71 @@ const backlog: MuUpdate[] = [];
 // --- The channel to mu ---
 
 /**
+ * When the current stretch of mu's work began: the `input` call that started it, or the
+ * first activity line if mu was steered from its own REPL instead. Cleared by whatever
+ * ends the stretch. Agent 1 has no clock of its own, so without this it cannot tell a
+ * build that just started from one that has been stuck for two minutes.
+ */
+let muSince: number | null = null;
+
+/** mu's answers and failures waiting for the model to finish speaking. */
+const news: string[] = [];
+
+/**
  * Hands one update to agent 1.
  *
  * `turnComplete` is the whole distinction between an event and a message: false accrues
- * context in silence, true asks for a reply. Activity is therefore free — it costs tokens,
- * not speech.
+ * context in silence, true asks for a reply. Activity is always false — it costs tokens,
+ * not speech — and goes out at once. News waits for the floor: see `flushNews`.
  */
 function inject(update: MuUpdate) {
   if (!session) {
     backlog.push(update);
     return;
   }
-  const text = update.kind === "activity"
-    ? `[mu] trabajando — ${update.text}`
-    : update.kind === "error"
-    ? `[mu] falló: ${update.text}`
-    : `[mu] respondió: ${update.text}`;
+  if (update.kind !== "activity") {
+    muSince = null;
+    news.push(update.kind === "error" ? `[mu] falló: ${update.text}` : `[mu] respondió: ${update.text}`);
+    flushNews();
+    return;
+  }
+  muSince ??= performance.now();
+  const elapsed = ((performance.now() - muSince) / 1000).toFixed(0);
   session.sendClientContent({
-    turns: [{ role: "user", parts: [{ text }] }],
-    turnComplete: update.kind !== "activity",
+    turns: [{ role: "user", parts: [{ text: `[mu] trabajando (${elapsed}s) — ${update.text}` }] }],
+    turnComplete: false,
+  });
+}
+
+/**
+ * Sends held news, if the floor allows it; called on every change of who is talking.
+ *
+ * `turnComplete:true` "unconditionally interrupts active model generation" (the 3.8 docs),
+ * so while the model speaks, news is held back entirely and goes out when its turn
+ * completes. While the user speaks, it goes out with turnComplete:false: asking for a
+ * reply over them would have VAD cancel and discard it at their next word, whereas
+ * accrued it is simply there when their turn closes, and the one reply covers both.
+ */
+function flushNews() {
+  if (!session || news.length === 0 || conv.modelSpeaking) return;
+  session.sendClientContent({
+    turns: news.splice(0).map((text) => ({ role: "user", parts: [{ text }] })),
+    turnComplete: !conv.userSpeaking,
   });
 }
 
 /**
  * One `input` call: ack the tool on the spot, fire the send, walk away.
  *
- * The tool response is protocol, not information — this model has no async function
- * calling, so an unanswered call stalls the session, and inputs and outputs don't pair
- * 1:1 anyway (follow-up lines steer a busy mu; one instruction can yield many messages).
+ * The tool response is protocol, not information — the call is BLOCKING, so an unanswered
+ * one stalls the session, and inputs and outputs don't pair 1:1 anyway (follow-up lines
+ * steer a busy mu; one instruction can yield many messages).
  * Everything real, delivery failure included, travels the injection channel.
  */
 function relayInput(text: string): Record<string, unknown> {
   if (!mu) return { error: "mu no está conectado" };
   if (!text) return { error: "faltó el texto de la instrucción" };
+  muSince ??= performance.now();
   mu.send(text).then(
     (r) => {
       if (!r.ok) {
@@ -218,6 +254,7 @@ const conv = createConversation({
   relayInput,
   saveHandle,
   closeSession: () => session?.close(),
+  floorChanged: flushNews,
 });
 
 
@@ -264,10 +301,15 @@ function connect(): Promise<{ session: Session; closed: Promise<void> }> {
           tools: [{
             functionDeclarations: [{
               name: "input",
+              // 3.8 defaults to NON_BLOCKING, where the model talks on and an unscheduled
+              // response cuts in on it. Blocking, the model pauses for the instant ack.
+              behavior: Behavior.BLOCKING,
               description:
-                "Le manda una instrucción a mu, el agente que construye. Devuelve enseguida y " +
-                "su resultado no dice nada de mu: lo que mu haga llega después, por su cuenta. " +
-                "Si mu está ocupado, más llamadas a input lo van guiando.",
+                "Manda trabajo a la construcción: algo para crear, cambiar o arreglar, o una " +
+                "decisión que tu cliente acaba de tomar. Devuelve enseguida y su resultado no " +
+                "dice nada del trabajo: lo que pase llega después, por su cuenta, al registro. " +
+                "Si ya hay algo en curso, más llamadas lo van guiando. No la uses para " +
+                "preguntas sobre el avance ni para charla: eso lo contestás vos.",
               parameters: {
                 type: Type.OBJECT,
                 properties: {
@@ -306,11 +348,17 @@ function onKey(event: { code: number; ctrl: boolean; type: string }): boolean | 
 
   if (!pressed) return;
   if (event.code === KEY_M) {
-    muted = !muted;
-    metrics.event(muted ? "tecla mute" : "tecla unmute");
-    status(muted ? "micrófono en silencio" : "micrófono abierto");
+    // The same mute the keyboard's mic key does: the source hands pw-record zeros and
+    // the capture stream never stops, so the server hears silence and closes the turn.
+    metrics.event("tecla mute toggle");
+    toggleSourceMute().then((muted) =>
+      status(muted === null ? "no pude silenciar el micrófono" : muted ? "micrófono en silencio" : "micrófono abierto")
+    );
   } else if (event.code === KEY_SPACE) {
+    // Local only: under automatic VAD nothing tells the server to stop. The queue is
+    // dropped and the rest of this turn's audio is discarded as it arrives.
     rig.speaker.interrupt();
+    conv.discardReply();
     status("reproducción cortada");
   }
 }
@@ -334,7 +382,7 @@ async function cleanup() {
 await preflight(status);
 status(`métricas → ${METRICS_FILE} · grabación → data/mic.wav, data/voz.wav`);
 const rig = startAudio((chunk) => {
-  const sent = session !== null && !muted;
+  const sent = session !== null;
   metrics.frame(chunk, sent, rig.speaker.playing);
   if (!sent) return;
   session!.sendRealtimeInput({
@@ -396,8 +444,9 @@ while (running) {
     break;
   }
   status(resumptionHandle ? "conversación retomada" : "conectado — hablá");
-  while (backlog.length > 0) inject(backlog.shift()!);
   conv.connectionOpened();
+  while (backlog.length > 0) inject(backlog.shift()!);
+  flushNews();
   await Promise.race([closed, keys]);
   session?.close();
   session = null;

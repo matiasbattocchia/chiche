@@ -25,7 +25,7 @@ bun start --ptt            # push to talk
 
 One app, one task; flags combine. `--no-mu` leaves the voice with no tools at all.
 
-Keys: `m` mute · `space` interrupt the model · `q` quit.
+Keys: `m` toggle the system mic mute (the same one the keyboard's mic key flips) · `space` cut playback · `q` quit.
 
 Under `--ptt` **you** gate the microphone, with the keyboard's own mic-mute key. The
 app does nothing for it and needs no keybinding: muting a PipeWire source hands
@@ -48,16 +48,23 @@ other verbatim.
 Agent 1 sends work through an `input` tool and mu's output comes back out of band,
 injected as `[mu]` turns. `turnComplete:false` accrues mu's activity — tool calls,
 thinking, failures — as context that generates nothing, so agent 1 knows the build is
-still running without narrating it; mu's final answer arrives with `turnComplete:true`,
-which is what makes it speak, in its own words rather than reading the transcript out.
+still running without narrating it; each line is stamped with seconds since the work
+began, because the model has no clock and would otherwise not tell a fresh build from a
+stuck one. mu's final answer arrives with `turnComplete:true`, which is what makes it
+speak, in its own words rather than reading the transcript out — but only onto a free
+floor. While the model speaks it is held back, because `turnComplete:true`
+unconditionally interrupts generation, and goes out when the model's turn completes.
+While you speak it accrues like activity and your own turn brings it out, since a reply
+requested over you would be discarded at your next word.
 
-The tool is fire and forget: it answers on the spot with a canned ack (async function
-calling is not supported on this model, and a call left hanging stalls the session) and
-the send happens in the background. Inputs and outputs don't pair 1:1 — lines sent while
+The tool is fire and forget: it answers on the spot with a canned ack and the send
+happens in the background. It is declared `BLOCKING` on purpose: gemini-3.8-live defaults
+to async function calling, which pairs one response to one call and lets the model talk
+on while it waits — the wrong shape for mu, and an unscheduled response cuts in on that
+speech. Inputs and outputs don't pair 1:1 — lines sent while
 mu is busy steer it, one instruction can yield many messages — so nothing of mu's, not
 even a delivery failure, travels as a tool result; it all enters agent 1's context as
-injected turns. The default is an open mic; `--ptt` gates it behind the space bar, which
-narrows the race between your turn and the injected ones.
+injected turns.
 
 Each agent has one conversation, not one per run. mu's is its log; the voice model's is
 the Live API session, whose resumption handle is persisted under `data/relay/` and

@@ -1,5 +1,5 @@
 // config.jsonc — the org's declaration: every harness knob (the catalog, DESIGN §9).
-// Only the setup doors write it (`mu init` materializes it, `mu connect` declares the
+// Only the setup doors write it (`liquen init` materializes it, `liquen connect` declares the
 // connection it just earned) — git is its history, boot compiles it into the registry.
 // A key left out takes its default; an unknown key is a boot error.
 {
@@ -34,10 +34,10 @@
       "maxTokens": 64000,
       // model provider (the transport seam); null ⇒ Anthropic
       "provider": null,
-      // the tools offered to the model, by name — built-ins and exec tools (bash, MCP) alike; null ⇒ every tool the deployment has. Add "send" where the agent has peers or a world to write to — a reply to its own principal is its plain answer, never a call
+      // the tools offered to the model, by name — built-ins and exec tools (bash, MCP) alike; null ⇒ every tool the deployment has. Add "send" where the agent has peers or a world to write to — a reply to its own principal is its plain answer, never a call — and "contact" where an account keeps an address book the agent may write
       "tools": ["search","schedule","cancel","bash"],
       // permission policy: first match decides (allow|ask|deny); * matches any tool; connection/conversation pin a rule to where a send lands
-      "rules": [{"tool":"send","action":"ask"},{"tool":"*","action":"allow"}],
+      "rules": [{"tool":"send","action":"ask"},{"tool":"contact","action":"ask"},{"tool":"*","action":"allow"}],
       // attention: a conversation stays hot this long after the agent's own last word
       "engagedMinutes": 15,
       // attention: an ambient pile this deep wakes the agent before the interval does

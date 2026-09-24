@@ -108,6 +108,13 @@ export async function preflight(status: (text: string) => void): Promise<void> {
   if (sink) status(`salida: ${sink}`);
 }
 
+/** Toggles the default source's mute; the new state, or null when pactl failed. */
+export async function toggleSourceMute(): Promise<boolean | null> {
+  if ((await pactl(["set-source-mute", "@DEFAULT_SOURCE@", "toggle"])) === null) return null;
+  const state = await pactl(["get-source-mute", "@DEFAULT_SOURCE@"]);
+  return state === null ? null : /yes/.test(state);
+}
+
 // --- Signals ---
 
 const SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;

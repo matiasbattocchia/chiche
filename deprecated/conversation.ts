@@ -31,6 +31,8 @@ export interface ConversationIO {
   saveHandle(handle: string): void;
   /** Close the socket: the reconnect loop takes it from there. */
   closeSession(): void;
+  /** Someone started or stopped talking: `userSpeaking` or `modelSpeaking` changed. */
+  floorChanged(): void;
 }
 
 /** Time, injectable: tests replay a recording without waiting for it. */
@@ -84,13 +86,17 @@ export interface Conversation {
   micChunkSent(chunk: Uint8Array): void;
   /** A fresh socket: per-connection state starts over. */
   connectionOpened(): void;
+  /** The user cut playback: drop the rest of this reply's audio as it arrives. */
+  discardReply(): void;
   /** Whether the current connection said anything at all; a silent one means a bad resume. */
   readonly gotMessage: boolean;
   /** Set while the model believes the user's turn is open. */
   userSpeaking: boolean;
+  /** Set from the model's first audio until its turn completes or is interrupted. */
+  readonly modelSpeaking: boolean;
 }
 
-export function createConversation(io: ConversationIO, opts: ConversationOptions): Conversation {
+export function createConversation(io: ConversationIO, opts: ConversationOptions = {}): Conversation {
   const timers: Timers = opts.timers ?? {
     now: () => performance.now(),
     setTimeout: (fn, ms) => setTimeout(fn, ms),
@@ -98,7 +104,17 @@ export function createConversation(io: ConversationIO, opts: ConversationOptions
   };
 
   let userSpeaking = false;
+  let modelSpeaking = false;
   let gotMessage = false;
+  /** Set by discardReply, cleared when the reply ends either way. */
+  let discarding = false;
+
+  function setFloor(user: boolean, model: boolean) {
+    if (user === userSpeaking && model === modelSpeaking) return;
+    userSpeaking = user;
+    modelSpeaking = model;
+    io.floorChanged();
+  }
 
   // reply pacing
   let replyDueAt: number | null = null;
@@ -159,6 +175,7 @@ export function createConversation(io: ConversationIO, opts: ConversationOptions
    *  short by a barge-in is too little to judge. */
   function replyEnded() {
     timers.clearTimeout(stallTimer);
+    discarding = false;
     if (replyStartedAt !== null && replyChunks > 1 && replyAudioMs >= MIN_JUDGED_REPLY_MS) {
       const streamS = (lastAudioAt - replyStartedAt) / 1000;
       const ratio = replyAudioMs / 1000 / Math.max(streamS, 0.001);
@@ -231,14 +248,15 @@ export function createConversation(io: ConversationIO, opts: ConversationOptions
       replyEnded();
       io.metrics.event("srv interrupted");
       io.vadEvent("speech detected · barge-in");
-      userSpeaking = true;
+      setFloor(true, false);
     } else {
       for (const part of content.modelTurn?.parts ?? []) {
         if (part.inlineData?.data) {
           const audio = io.decodeBase64(part.inlineData.data);
-          io.speaker.write(audio);
+          if (!discarding) io.speaker.write(audio);
           io.metrics.playback(audio);
           noteReplyAudio(audio.length / 48);
+          setFloor(userSpeaking, true);
           io.metrics.event(`srv audio ${(audio.length / 48).toFixed(0)}ms`);
         } else {
           // A turn with no audio in it: say what it carried instead (text, thought…).
@@ -253,7 +271,7 @@ export function createConversation(io: ConversationIO, opts: ConversationOptions
       if (content.inputTranscription?.text) expectReply();
       if (!userSpeaking) {
         io.vadEvent("speech start");
-        userSpeaking = true;
+        setFloor(true, modelSpeaking);
       }
       io.transcribe("user", inputText);
     }
@@ -265,7 +283,7 @@ export function createConversation(io: ConversationIO, opts: ConversationOptions
         // endpointing latency as you experience it.
         const s = io.metrics.sinceLoud();
         io.vadEvent(`speech end${s === null ? "" : ` · respuesta +${s.toFixed(1)}s`}`);
-        userSpeaking = false;
+        setFloor(false, modelSpeaking);
       }
       io.transcribe("model", content.outputTranscription.text);
     }
@@ -280,17 +298,24 @@ export function createConversation(io: ConversationIO, opts: ConversationOptions
       replyEnded();
       io.metrics.event("srv turn complete");
       io.vadEvent("turn complete");
-      userSpeaking = false;
+      setFloor(false, false);
     }
   }
 
   return {
     handleMessage,
     micChunkSent,
+    discardReply() {
+      if (modelSpeaking) discarding = true;
+    },
     connectionOpened() {
       gotMessage = false;
+      discarding = false;
       loudSinceReactionMs = 0;
       deafDetected = false;
+      // A dropped socket never sends the turnComplete that would have closed either turn.
+      userSpeaking = false;
+      modelSpeaking = false;
     },
     get gotMessage() {
       return gotMessage;
@@ -299,7 +324,10 @@ export function createConversation(io: ConversationIO, opts: ConversationOptions
       return userSpeaking;
     },
     set userSpeaking(v: boolean) {
-      userSpeaking = v;
+      setFloor(v, modelSpeaking);
+    },
+    get modelSpeaking() {
+      return modelSpeaking;
     },
   };
 }

@@ -35,7 +35,8 @@ function fakeClock() {
 function harness(opts: { mu?: boolean } = {}) {
   const clock = fakeClock();
   const out = { transcript: [] as string[], markers: [] as string[], status: [] as string[], events: [] as string[],
-    audioBytes: 0, interrupts: 0, toolResponses: [] as unknown[], handles: [] as string[], closed: 0, lastLoud: null as number | null };
+    audioBytes: 0, interrupts: 0, toolResponses: [] as unknown[], handles: [] as string[], closed: 0, lastLoud: null as number | null,
+    floor: [] as string[] };
   const io: ConversationIO = {
     speaker: { write: (a) => { out.audioBytes += a.length; }, interrupt: () => { out.interrupts++; } },
     transcribe: (v, text) => out.transcript.push(`${v}:${text}`),
@@ -47,6 +48,7 @@ function harness(opts: { mu?: boolean } = {}) {
     relayInput: (text) => opts.mu ? { output: "enviado a mu" } : { error: "mu no está conectado" },
     saveHandle: (h) => out.handles.push(h),
     closeSession: () => { out.closed++; },
+    floorChanged: () => out.floor.push(`${conv.userSpeaking ? "U" : "-"}${conv.modelSpeaking ? "M" : "-"}`),
   };
   const conv = createConversation(io, { timers: clock });
   return { conv, clock, out };
@@ -172,5 +174,34 @@ describe("late while still talking", () => {
     h.out.lastLoud = null; // quiet now: the next check fires
     h.clock.advanceTo(LATE_REPLY_MS * 5);
     expect(h.out.markers.some((m) => m.startsWith("respuesta demorada"))).toBe(true);
+  });
+});
+
+describe("the floor", () => {
+  test("user, then model, then free — one change each", () => {
+    const h = harness();
+    h.conv.handleMessage({ serverContent: { inputTranscription: { text: "Hola." } } });
+    h.conv.handleMessage({ serverContent: { inputTranscription: { text: " ¿cómo va?" } } });
+    h.conv.handleMessage({ serverContent: { modelTurn: { parts: [audio(200)] } } });
+    h.conv.handleMessage({ serverContent: { outputTranscription: { text: "Bien." } } });
+    h.conv.handleMessage({ serverContent: { modelTurn: { parts: [audio(200)] } } });
+    expect(h.conv.modelSpeaking).toBe(true);
+    h.conv.handleMessage({ serverContent: { generationComplete: true } });
+    expect(h.conv.modelSpeaking).toBe(true); // generated, but the turn is not over
+    h.conv.handleMessage({ serverContent: { turnComplete: true } });
+    expect(h.out.floor).toEqual(["U-", "UM", "-M", "--"]);
+  });
+  test("a barge-in hands the floor to the user", () => {
+    const h = harness();
+    h.conv.handleMessage({ serverContent: { modelTurn: { parts: [audio(200)] } } });
+    h.conv.handleMessage({ serverContent: { interrupted: true } });
+    expect(h.out.floor).toEqual(["-M", "U-"]);
+  });
+  test("a new socket frees the floor", () => {
+    const h = harness();
+    h.conv.handleMessage({ serverContent: { modelTurn: { parts: [audio(200)] } } });
+    h.conv.connectionOpened();
+    expect(h.conv.modelSpeaking).toBe(false);
+    expect(h.conv.userSpeaking).toBe(false);
   });
 });

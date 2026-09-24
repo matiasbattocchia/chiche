@@ -7,7 +7,7 @@
     "noEmit": true,
     "strict": true,
     "types": ["bun-types"],
-    "paths": { "@mu/*": ["../liquen/src/*"] }
+    "paths": { "@mu/*": ["../../liquen/src/*"] }
   },
   "include": ["*.ts", "tests/*.ts"]
 }
