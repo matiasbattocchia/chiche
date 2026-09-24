@@ -1,4 +1,4 @@
-# Voice REPL
+# chiche
 
 A terminal voice agent on the [Gemini Live API](https://ai.google.dev/gemini-api/docs/live).
 Talk into the microphone, hear the reply, and watch both sides of the
