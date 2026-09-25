@@ -353,6 +353,14 @@ up.mixer = watchMixer((m) => {
 
 /** The gate. */
 let open = false;
+/**
+ * The gate closed at this moment, and the audio captured up to it is still on its way (see
+ * `AudioEvents.chunk`): it is sent, then the turn ends. A stalled capture ends it anyway.
+ */
+let closing:
+  | { at: number; why: string; timer: ReturnType<typeof setTimeout>; sent: number }
+  | undefined;
+const TAIL_WAIT_MS = 300;
 /** Chunks sent since the mic last opened. */
 let sent = 0;
 /** When the child's turn (or the say-hi kick) ended with no answer yet. */
@@ -368,17 +376,34 @@ function mic(now: boolean, why: string) {
   if (now === open) return;
   open = now;
   if (open) {
+    endTurn("the mic opened again"); // a turn still waiting for its tail ends first
     sent = 0;
     waitingSince = undefined;
     up.voice?.activityStart();
     term.dim(`mic open (${why})`);
     log.line("mic", `open (${why})`);
   } else {
-    up.voice?.activityEnd();
-    if (up.voice?.connected) waitingSince = performance.now();
-    term.dim(`mic closed (${why}) · sent ${chunks(sent)}`);
-    log.line("mic", `closed (${why}), sent ${chunks(sent)}`);
+    closing = {
+      at: performance.now(),
+      why,
+      timer: setTimeout(() => endTurn(`no capture for ${TAIL_WAIT_MS} ms`), TAIL_WAIT_MS),
+      sent,
+    };
+    log.line("mic", `closed (${why}), sending what was captured until now`);
   }
+}
+
+/** The closed gate's tail is sent, or given up `because` of something: the turn ends. */
+function endTurn(because?: string) {
+  if (!closing) return;
+  clearTimeout(closing.timer);
+  const { why, sent: before } = closing;
+  closing = undefined;
+  up.voice?.activityEnd();
+  if (up.voice?.connected) waitingSince = performance.now();
+  const cut = because ? `, cut short: ${because}` : "";
+  term.dim(`mic closed (${why}) · sent ${chunks(sent)}${cut}`);
+  log.line("mic", `turn ended, sent ${chunks(sent)}, ${sent - before} after closing${cut}`);
 }
 
 /** The voice's first content since the turn ended. */
@@ -396,9 +421,11 @@ function answered(what: string) {
 }
 
 up.audio = Audio.start({
-  chunk(pcm) {
-    if (open && up.voice?.sendAudio(pcm)) sent++;
-    log.micAudio(open ? pcm : new Uint8Array(pcm.length));
+  chunk(pcm, at) {
+    const sending = open || closing !== undefined;
+    if (sending && up.voice?.sendAudio(pcm)) sent++;
+    log.micAudio(sending ? pcm : new Uint8Array(pcm.length));
+    if (closing && at >= closing.at) endTurn();
   },
   window: (w) => log.mic(w),
   died(which, code) {

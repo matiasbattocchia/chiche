@@ -22,8 +22,13 @@ const VOICE_OVER_FLOOR_DB = 8;
 const VOICE_MIN_DB = -55;
 
 export interface AudioEvents {
-  /** Every capture chunk (40 ms), as the mic delivered it. */
-  chunk(pcm: Uint8Array): void;
+  /**
+   * Every capture chunk (40 ms), as the mic delivered it. `at`: when its last sample was captured,
+   * on the performance clock. A Bluetooth mic delivers 128 ms at a time whatever pw-record's
+   * `--latency` (measured 2026-09-25, Galaxy Buds2 Pro, 100/40/20 ms alike), so a read's chunks
+   * are dated back from its arrival. The device's own latency isn't counted.
+   */
+  chunk(pcm: Uint8Array, at: number): void;
   window(w: MicWindow): void;
   /** A process died on its own. */
   died(which: "pw-record" | "pw-play", code: number | null): void;
@@ -199,7 +204,8 @@ export class Audio {
         this.#micLast = level;
         if (level > this.#micMax) this.#micMax = level;
         if (isVoice) this.#micVoice = voice = true;
-        this.#on.chunk(chunk);
+        // what is still in the buffer was captured after this chunk
+        this.#on.chunk(chunk, now - buf.length / 2 / MIC_RATE * 1000);
         if (now - windowStart >= WINDOW_MS) {
           windowStart = now;
           const level = dbfs(Math.sqrt(sumSq / Math.max(1, samples)) / 32768);

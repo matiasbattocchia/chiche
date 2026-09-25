@@ -101,6 +101,13 @@ with room noise flowing, nothing in 12 s (0 of 3).
     `activityStart`, closing `activityEnd`. While it is open every capture chunk is sent, zeros
     included. An open mic is an open turn: nothing is answered until it closes (the user's run
     `log/2026-09-25T16-28-21`, and the say-hi measurement below), hence closed at boot.
+  - Closing waits for its tail. A Bluetooth mic delivers 128 ms at a time, whatever pw-record's
+    `--latency` (Galaxy Buds2 Pro, 2026-09-25: 100, 40 and 20 ms alike), so at the key's release up
+    to 128 ms of speech is still on its way; cutting there lost the last syllable (the user's run
+    `log/2026-09-25T17-25-24`: the window after the release read as voice). Each chunk is dated back
+    from its read's arrival; the gate keeps sending until the chunk that reaches the release, then
+    sends `activityEnd` (300 ms at most, for a stalled capture). The device's own latency isn't
+    counted. Opening again before that ends the waiting turn first.
 - A Bluetooth mic delivers exact zeros for its first second, unmuted, while it switches profile
   (Galaxy Buds2 Pro, 2026-09-25: 1.06–1.32 s in 3 runs). The mic windows flag exact zeros (`zeros`),
   so a muted source or that switch reads as such in the timeline.
@@ -114,10 +121,10 @@ with room noise flowing, nothing in 12 s (0 of 3).
 - **Turn edges:** automatic activity detection is off
   (`realtimeInputConfig.automaticActivityDetection.disabled`, the SDK: "the client must send
   activity signals"); the mic opening sends `activityStart`, closing sends `activityEnd`, so the
-  turn ends the moment the mic closes, with no endpointing wait. A reconnect with the mic open sends
-  a fresh `activityStart`. Measured 2026-09-24 with automatic detection: a mute right after the last
-  word left the turn open (no transcript, no answer) until the next unmute, since the server never
-  heard the silence after the words; `audioStreamEnd` alone did not end it.
+  turn ends once the mic has closed and its tail is sent, with no endpointing wait. A reconnect with
+  the mic open sends a fresh `activityStart`. Measured 2026-09-24 with automatic detection: a mute
+  right after the last word left the turn open (no transcript, no answer) until the next unmute,
+  since the server never heard the silence after the words; `audioStreamEnd` alone did not end it.
 - **VAD and activity signals don't mix on one connection:** the setup "will apply for the duration
   of the streaming session", and the signals "can only be sent if automatic activity detection is
   disabled" (SDK 2.24.0 types). Measured 2026-09-25: resuming with the handle and automatic
@@ -139,10 +146,13 @@ with room noise flowing, nothing in 12 s (0 of 3).
 - **No transcript while the child speaks.** `LiveServerContent.interimInputTranscription` exists
   (SDK 2.24.0 types: "low latency transcription updated while the user is speaking"), and the SDK
   hands the server's JSON through as it comes (Gemini API path, `Object.assign`), so what the
-  timeline logs is what the server sent. `gemini-3.8-live` sent none in any run; the input
-  transcript arrived 0.37–0.54 s after `activityEnd` (runs of 2026-09-25). The docs describe interim
-  transcription only for `gemini-3.5-transcribe-live`; a second session on it would double the audio
-  sent, and transcribe what a different model heard, so no.
+  timeline logs is what the server sent. `gemini-3.8-live` sent none in any run, nor anything else
+  while the mic was open but `interrupted` over a playing answer; the input transcript arrived
+  0.37–0.54 s after `activityEnd` in the runs of 16:18–16:28 and 1.5–3.7 s in the user's run
+  `log/2026-09-25T17-25-24`, always 0.7–1.1 s before the first answer. Same code and setup, so the
+  server's; `thinking_level` is not supported on `gemini-3.8-live` (migration guide). The docs
+  describe interim transcription only for `gemini-3.5-transcribe-live`; a second session on it would
+  double the audio sent, and transcribe what a different model heard, so no.
 
 ## Gemini session
 
