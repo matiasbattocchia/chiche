@@ -73,11 +73,12 @@ export class Door {
   }
 
   /** Connect and `tail`; throws when nothing answers. While the connection lives, the
-   *  session thinks with `MODEL` at the roster's effort, and its shell starts in `dir`. */
-  static async connect(dir: string, user: string, on: DoorEvents): Promise<Door> {
+   *  session thinks with `MODEL` at the roster's effort, and its shell starts in `shell`
+   *  (liquen's shell keeps its directory between commands). */
+  static async connect(dir: string, user: string, shell: string, on: DoorEvents): Promise<Door> {
     const conn = await Deno.connect({ transport: "unix", path: Door.socket(dir, user) });
     const door = new Door(user, conn, on);
-    const t = await door.request({ op: "tail", cwd: dir, model: MODEL });
+    const t = await door.request({ op: "tail", cwd: shell, model: MODEL });
     if (!t.ok) {
       door.close();
       throw new Error(`tail refused: ${t.error}`);
@@ -159,6 +160,15 @@ export function toolUseOf(e: DoorEvent): { name: string; input: string } | undef
   const data = e.parts?.[0]?.data as { name?: string; input?: unknown } | undefined;
   if (!data?.name) return undefined;
   return { name: data.name, input: clip(JSON.stringify(data.input ?? {}), 200) };
+}
+
+/** The builder's thinking before a step, its last paragraph: what it is about to do, in words. */
+export function thinkingOf(e: DoorEvent): string | undefined {
+  if (e.type !== "thinking") return undefined;
+  const data = e.parts?.[0]?.data as { thinking?: unknown } | undefined;
+  if (typeof data?.thinking !== "string") return undefined;
+  const last = data.thinking.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).at(-1);
+  return last ? clip(last, 300) : undefined;
 }
 
 export function errorOf(e: DoorEvent): string | undefined {

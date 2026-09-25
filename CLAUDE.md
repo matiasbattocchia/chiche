@@ -9,5 +9,3 @@ Two agents, one conversation with a child who designs video games.
 
 They never hear each other verbatim. The voice turns what the child says into work for
 the builder, and turns the builder's results into something a five-year-old wants to hear.
-
-`PLAN.md` is the implementation plan.

@@ -52,7 +52,9 @@ change freely: colors, characters, names, worlds, rules.
 
 ## Stack
 
-Phaser 4 in TypeScript, built with Deno. In `organization/`:
+Phaser 4 in TypeScript, built with Deno. In `organization/`, where chiche starts your shell
+(paths below are relative to it). The shell keeps its directory between commands: `cd` when
+you want to be somewhere else, not before every command.
 
 - `kit/mod.ts`: shared by every game, imported as `"kit"`. `startGame`, `next`,
   `kit.save`, `kit.difficulty`, `sfx`, `prize`. Read it before your first game.
@@ -85,8 +87,8 @@ for all of them:
 
 ## The loop
 
-1. `game new <slug>`, or edit an existing game. Commit as you go in `organization/games/`,
-   the games' own git repo.
+1. `game new <slug>`, or edit an existing game. Commit as you go in `games/`, the games'
+   own git repo.
 2. `game check <slug>` must pass.
 3. `game test <slug>` with `--keys` that play the change, then look: `aread` the
    screenshots. It builds privately and never touches the child's screen. A change

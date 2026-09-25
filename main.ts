@@ -13,7 +13,7 @@ import { TextLineStream } from "@std/streams";
 import { Audio, type Device, type Mixer, mixer, unmute, VOICE_RATE, watchMixer } from "./audio.ts";
 import { Scheduling, Voice } from "./gemini.ts";
 import { keyCode, keyName, Keys } from "./keys.ts";
-import { clip, Door, errorOf, isReply, toolUseOf } from "./liquen.ts";
+import { clip, Door, errorOf, isReply, thinkingOf, toolUseOf } from "./liquen.ts";
 import { Log } from "./log.ts";
 import { BOLD, DIM, GREEN, Meter, RED, RESET, Terminal, YELLOW } from "./term.ts";
 
@@ -131,6 +131,7 @@ const up: {
   voice?: Voice;
   keys?: Keys;
   status?: ReturnType<typeof setInterval>;
+  updates?: ReturnType<typeof setInterval>;
 } = {};
 let tearingDown = false;
 
@@ -138,6 +139,7 @@ async function teardown(code = 0) {
   if (tearingDown) return;
   tearingDown = true;
   clearInterval(up.status);
+  clearInterval(up.updates);
   term.end();
   term.dim("bye");
   up.keys?.stop();
@@ -212,8 +214,21 @@ if (noLiquen) {
 interface Call {
   id: string;
   messageId?: string;
+  sentAt?: number;
 }
 const calls: Call[] = [];
+/** The builder's latest note (its thinking, else its latest tool use), for the updates. */
+let lastNote = "";
+/**
+ * While an `input` call is open and nobody has spoken for this long, the latest note goes as a
+ * WHEN_IDLE answer, so the voice tells the child how it's going. Notes otherwise go SILENT.
+ */
+const UPDATE_QUIET_MS = 30_000;
+/** Last time anyone spoke: the mic opening or closing, the voice's audio, a turn completing. */
+let lastTalk = performance.now();
+
+/** Answer scheduling that makes the voice speak unless it already has in this answer. */
+const unlessSpoken = () => received > 0 ? Scheduling.SILENT : Scheduling.WHEN_IDLE;
 const newest = () => calls.at(-1);
 const closeCall = (c: Call) => {
   const i = calls.indexOf(c);
@@ -235,11 +250,21 @@ function forward(what: string, output: string, scheduling: Scheduling, willConti
 }
 
 if (!noLiquen) {
-  up.door = await Door.connect(DATA, user, {
+  // the builder's shell starts where the games are made: games/, kit/, template/ (the `game`
+  // command finds them itself, from wherever it runs)
+  up.door = await Door.connect(DATA, user, join(DATA, "organization"), {
     trace: (d, m) => log.door(d, m),
     event(e) {
+      const thinking = thinkingOf(e);
+      if (thinking) {
+        lastNote = thinking;
+        return forward("note", `thinking: ${thinking}`, Scheduling.SILENT);
+      }
       const use = toolUseOf(e);
-      if (use) return forward("progress", `working: ${use.name} ${use.input}`, Scheduling.SILENT);
+      if (use) {
+        lastNote ||= `${use.name} ${use.input}`;
+        return forward("progress", `working: ${use.name} ${use.input}`, Scheduling.SILENT);
+      }
       if (up.door && isReply(e, up.door.address)) {
         const text = (e.parts ?? []).filter((p) => p.type !== "data").map((p) => p.text).join(" ");
         return forward("result", text, Scheduling.WHEN_IDLE);
@@ -289,28 +314,43 @@ async function input(callId: string, text: string) {
     ? await up.door.message(text)
     : { ok: false, id: undefined, error: "the builder is off (chiche runs with --no-liquen)" };
   if (!calls.includes(c)) return; // cancelled meanwhile
+  // once the voice has spoken this turn, WHEN_IDLE would have it speak again once it's idle
+  // (measured: a second answer 0.44 s after the first ended); before it has, WHEN_IDLE is what
+  // makes it speak at all (measured: a turn that was only the call, and the user's run
+  // log/2026-09-25T17-45-59, where a SILENT "sent" left the child with nothing)
   if (r.ok && typeof r.id === "string") {
     c.messageId = r.id;
+    c.sentAt = performance.now();
+    lastNote = "";
     term.dim(`sent (${r.id.slice(-6)})`);
-    up.voice?.answer({
-      id: c.id,
-      output: "sent",
-      scheduling: Scheduling.SILENT,
-      willContinue: true,
-    });
+    up.voice?.answer({ id: c.id, output: "sent", scheduling: unlessSpoken(), willContinue: true });
   } else {
     term.dim(`not sent: ${r.error}`);
     up.voice?.answer({
       id: c.id,
       output: `error: ${r.error ?? "not sent"}`,
-      // without a builder, once the voice has spoken this turn: WHEN_IDLE would have it speak
-      // again once it's idle (measured: a second answer 0.44 s after the first ended). Before
-      // it has, WHEN_IDLE is what makes it speak at all (measured: a turn that was only the call)
-      scheduling: !up.door && received > 0 ? Scheduling.SILENT : Scheduling.WHEN_IDLE,
+      scheduling: unlessSpoken(),
       willContinue: false,
     });
     closeCall(c);
   }
+}
+
+/** An update on the open work, when nobody has spoken for a while (see UPDATE_QUIET_MS). */
+function update() {
+  const c = newest();
+  const now = performance.now();
+  if (
+    !c?.sentAt || open || closing || answering || waitingSince !== undefined ||
+    up.audio?.playing || now - lastTalk < UPDATE_QUIET_MS
+  ) return;
+  lastTalk = now; // the next one after another quiet stretch, whether the voice speaks or not
+  const s = Math.round((now - c.sentAt) / 1000);
+  forward(
+    "update",
+    `update: still working, ${s} s in.${lastNote ? ` Latest: ${lastNote}` : ""}`,
+    Scheduling.WHEN_IDLE,
+  );
 }
 
 // 3. the kid's window
@@ -390,6 +430,7 @@ const chunks = (n: number) => `${n} chunks ${(n * 0.04).toFixed(1)} s`;
 function mic(now: boolean, why: string) {
   if (now === open) return;
   open = now;
+  lastTalk = performance.now();
   if (open) {
     endTurn("the mic opened again"); // a turn still waiting for its tail ends first
     endSilence("the mic opened");
@@ -415,6 +456,7 @@ function endTurn(because?: string) {
   clearTimeout(closing.timer);
   const { why, sent: before } = closing;
   closing = undefined;
+  lastTalk = performance.now();
   up.voice?.activityEnd();
   if (up.voice?.connected) {
     waitingSince = performance.now();
@@ -542,6 +584,7 @@ function status() {
 }
 term.pin(2);
 up.status = setInterval(status, STATUS_MS);
+up.updates = setInterval(update, 1000);
 
 // 5. Gemini
 up.voice = await Voice.start({
@@ -575,6 +618,7 @@ up.voice = await Voice.start({
     },
     audio(pcm) {
       answered("audio");
+      lastTalk = performance.now();
       received++;
       receivedMs += pcm.length / 2 / VOICE_RATE * 1000;
       log.voiceAudio(pcm);
@@ -595,6 +639,7 @@ up.voice = await Voice.start({
     },
     turnComplete() {
       term.end();
+      lastTalk = performance.now();
       if (answering) {
         log.line(
           "turn",
