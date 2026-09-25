@@ -6,9 +6,6 @@
 
 import { TextLineStream } from "@std/streams";
 
-/** The builder's model. */
-const MODEL = "claude-opus-5-5";
-
 /** The shape of a door event we care about (a subset of liquen's Event). */
 export interface DoorEvent {
   id: string;
@@ -72,13 +69,13 @@ export class Door {
     return `${dir}/agents/${user}/door.sock`;
   }
 
-  /** Connect and `tail`; throws when nothing answers. While the connection lives, the
-   *  session thinks with `MODEL` at the roster's effort, and its shell starts in `shell`
-   *  (liquen's shell keeps its directory between commands). */
+  /** Connect and `tail`; throws when nothing answers. The session thinks with the model
+   *  config.jsonc gives the agent, and its shell starts in `shell` (liquen's shell keeps
+   *  its directory between commands). */
   static async connect(dir: string, user: string, shell: string, on: DoorEvents): Promise<Door> {
     const conn = await Deno.connect({ transport: "unix", path: Door.socket(dir, user) });
     const door = new Door(user, conn, on);
-    const t = await door.request({ op: "tail", cwd: shell, model: MODEL });
+    const t = await door.request({ op: "tail", cwd: shell });
     if (!t.ok) {
       door.close();
       throw new Error(`tail refused: ${t.error}`);

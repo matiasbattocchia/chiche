@@ -59,6 +59,7 @@
   "agents": {
     // <name>: any organization.agents key re-declared, plus identity — the principal's name (the agent goes by it) and the handles they are known by; null ⇒ not declared
     "matias": {
+      "model": "claude-opus-5-5",
       "mind": true
     }
   },
