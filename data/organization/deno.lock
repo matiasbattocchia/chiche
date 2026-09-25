@@ -1,6 +1,7 @@
 {
   "version": "5",
   "specifiers": {
+    "npm:jsfxr@1.4.1": "1.4.1",
     "npm:phaser@4.2.1": "4.2.1",
     "npm:wrangler@4": "4.136.3"
   },
@@ -442,6 +443,10 @@
       "os": ["darwin"],
       "scripts": true
     },
+    "jsfxr@1.4.1": {
+      "integrity": "sha512-Xbamo2dpLF5B+ssyv6TUEIoHJ/KRt4SRK2J3JOOmUG+45XBjkGKTjR/KOyQ9sqjrx/uea/UTWI0+p5pOVm1bUw==",
+      "bin": true
+    },
     "kleur@4.1.5": {
       "integrity": "sha512-o+NO+8WrRiQEE4/7nwRJhN1HWpVmJm511pBHUxPLtp0BUISzlBplORYSmTclCnJvQq2tKu/sgl3xVpkc7ZWuQQ=="
     },
@@ -574,6 +579,7 @@
   },
   "workspace": {
     "dependencies": [
+      "npm:jsfxr@1.4.1",
       "npm:phaser@4.2.1"
     ]
   }

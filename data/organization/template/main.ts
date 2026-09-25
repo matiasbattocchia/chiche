@@ -1,4 +1,4 @@
-import { kit, next, Phaser, prize, sfx, startGame } from "kit";
+import { burst, flash, glow, kit, next, Phaser, pop, prize, sfx, squash, startGame } from "kit";
 import meta from "./game.json" with { type: "json" };
 
 const W = 960, H = 540;
@@ -54,14 +54,17 @@ class Play extends Phaser.Scene {
 
   create() {
     this.keys = this.input.keyboard!.createCursorKeys();
+    this.cameras.main.filters.internal.addVignette(0.5, 0.5, 0.9, 0.3);
     this.basket = this.physics.add.image(W / 2, H - 40, "basket").setImmovable(true);
     this.basket.setCollideWorldBounds(true);
     this.stars = this.physics.add.group();
     this.counter = this.add.text(20, 16, "", big(40));
     this.count(this.caught); // from the save: a reload keeps the stars
 
-    this.physics.add.overlap(this.basket, this.stars, (_b, star) => {
-      (star as Phaser.Physics.Arcade.Image).destroy();
+    this.physics.add.overlap(this.basket, this.stars, (_b, s) => {
+      const star = s as Phaser.Physics.Arcade.Image;
+      burst(this, star.x, star.y, { tint: 0xffd60a });
+      star.destroy();
       this.catch();
     });
     this.input.on("pointermove", (p: Phaser.Input.Pointer) => this.basket.x = p.x);
@@ -74,12 +77,15 @@ class Play extends Phaser.Scene {
     const x = Phaser.Math.Between(60, W - 60);
     const star = this.stars.create(x, -30, "star") as Phaser.Physics.Arcade.Image;
     star.setVelocityY(d.pick(140, 420)).setAngularVelocity(90);
+    pop(star);
+    glow(star, 0xfff3b0);
     this.basket.setScale(d.pick(1.4, 0.7), 1);
   }
 
   catch() {
     kit.difficulty.trial(true);
     sfx(this, "coin");
+    squash(this.basket);
     this.count(this.caught + 1);
     prize("star");
     if (this.caught % 5 === 0) this.fireworks();
@@ -101,14 +107,8 @@ class Play extends Phaser.Scene {
   fireworks() {
     prize("fireworks");
     sfx(this, "win");
-    const burst = this.add.particles(W / 2, H / 2, "star", {
-      speed: { min: 150, max: 400 },
-      scale: { start: 0.6, end: 0 },
-      lifespan: 900,
-      emitting: false,
-    });
-    burst.explode(40);
-    this.time.delayedCall(1000, () => burst.destroy());
+    flash(this, 0xfff3b0);
+    burst(this, W / 2, H / 2, { texture: "star", count: 40, speed: 400 });
   }
 
   override update() {

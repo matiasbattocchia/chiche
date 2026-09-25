@@ -19,8 +19,11 @@ attribution-required licenses unless the credit shows in the game.
 - **Drawn in code**: Phaser `Graphics` plus `generateTexture` in the boot scene.
   Shapes, stars, balls, simple characters. Good enough for a first version, and often
   for the last one.
-- **Sound**: the kit's `sfx()` synth covers click, jump, coin, kick, hit, miss and win.
-  For more, Kenney's audio packs, or add a preset to `PRESETS` in `kit/mod.ts`.
+- **Sound**: the kit's `sfx()` has click, jump, coin, kick, hit, miss, laser and win
+  (synthesized tones) and pickup, zap, explosion, powerup, hurt and blip (retro sounds
+  from jsfxr). For more, make one with `makeSound` (the `game-sound` skill), or use
+  Kenney's audio packs. You can't hear a sound, so choose files by name: use one only when
+  its name (or its pack's list) says what it sounds like.
 
 ## Where they go
 

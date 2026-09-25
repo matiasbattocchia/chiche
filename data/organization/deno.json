@@ -1,6 +1,7 @@
 {
   "imports": {
     "phaser": "npm:phaser@4.2.1",
+    "jsfxr": "npm:jsfxr@1.4.1",
     "kit": "./kit/mod.ts"
   },
   "compilerOptions": {
