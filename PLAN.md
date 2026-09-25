@@ -75,6 +75,17 @@ with chiche's setup: outside an activity the voice spoke in 1–4 s (6 of 6, rea
 `sendClientContent` user turn alike; the latter once called `input` twice); inside an open activity
 with room noise flowing, nothing in 12 s (0 of 3).
 
+`deno task chiche --vad`: the server's automatic activity detection takes the turns (the setup
+leaves `realtimeInputConfig` out, so detection is on; `activityStart`/`activityEnd` aren't sent).
+The gate still decides what is sent and still waits for its tail. Closing it sends silence (exact
+zeros) in the mic's place until the transcript or the voice's first content arrives, 10 s at most.
+The server ends a turn only on hearing silence: measured 2026-09-25 with the user's recorded
+question (`log/2026-09-25T17-25-24`, 24.3–30.4 s), streamed zeros got the transcript in 0.58, 0.60
+and 1.7 s and the voice in 0.9–2.5 s; `audioStreamEnd` then nothing (2 of 2), and nothing at all (2
+of 2), got no transcript and no answer in 12 s. The same question in the user's run, with
+`activityEnd`, got its transcript in 1.5 s. With the mic left open, room noise can hold the turn
+open for seconds (see "VAD and activity signals" below), and the speakers reach an open mic.
+
 ## Audio
 
 - Capture: `pw-record`, 16 kHz s16 mono on stdout (the skill's input format,
@@ -128,9 +139,9 @@ with room noise flowing, nothing in 12 s (0 of 3).
 - **VAD and activity signals don't mix on one connection:** the setup "will apply for the duration
   of the streaming session", and the signals "can only be sent if automatic activity detection is
   disabled" (SDK 2.24.0 types). Measured 2026-09-25: resuming with the handle and automatic
-  detection on works (the context carried over, VAD took the turns), so an open-mic mode would be a
-  reconnect. Server VAD on an open mic (speech, then room noise at about −55 dBFS) put 2 to 14 s
-  between the last word and the input transcript.
+  detection on works (the context carried over, VAD took the turns), so switching modes mid-run
+  would be a reconnect; `--vad` picks one for the run. Server VAD on an open mic (speech, then room
+  noise at about −55 dBFS) put 2 to 14 s between the last word and the input transcript.
 - **Open problem, measured 2026-09-25:** after `activityEnd` the answer sometimes doesn't come. The
   same recorded question, nothing sent after `activityEnd`: 2 of 5 runs got nothing within 15 s; in
   8 more, 4 had nothing after 2 s. When it comes, the transcript arrives in 0.35–0.7 s and the voice

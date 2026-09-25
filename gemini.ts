@@ -60,6 +60,11 @@ export interface VoiceOptions {
   /** BCP-47, e.g. es-AR. */
   language: string;
   systemInstruction: string;
+  /**
+   * The server's automatic activity detection takes the turns; `activityStart`/`activityEnd` do
+   * nothing (the signals "can only be sent if automatic activity detection is disabled").
+   */
+  vad: boolean;
   on: VoiceEvents;
 }
 
@@ -127,7 +132,7 @@ export class Voice {
    * signals"). Interrupts the voice if it was speaking (ActivityHandling's default).
    */
   activityStart() {
-    if (!this.connected || this.#active) return;
+    if (!this.connected || this.#active || this.#o.vad) return;
     this.#active = true;
     this.#o.on.trace("send", { activityStart: {} });
     this.#session!.sendRealtimeInput({ activityStart: {} });
@@ -184,8 +189,11 @@ export class Voice {
       outputAudioTranscription: {},
       contextWindowCompression: { slidingWindow: {} },
       sessionResumption: { handle: this.#handle },
-      // push to talk: the mic opening and closing mark the turn (activityStart / activityEnd)
-      realtimeInputConfig: { automaticActivityDetection: { disabled: true } },
+      // push to talk: the mic opening and closing mark the turn (activityStart / activityEnd);
+      // with `vad`, left out: the server's detection is on by default
+      ...(this.#o.vad ? {} : {
+        realtimeInputConfig: { automaticActivityDetection: { disabled: true } },
+      }),
       tools: [{ functionDeclarations: [INPUT_TOOL] }],
     };
     this.#o.on.trace("send", {

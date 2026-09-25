@@ -5,7 +5,8 @@
 // Gemini, stop the audio, close the door (so the hang-up isn't read as unexpected), `liquen
 // stop` and wait for it, stop game serve, close the logs. `--no-liquen` skips liquen, the door
 // and game serve: the voice alone, to test the audio; `input` calls get an error. `--say-hi`
-// has the voice take the first turn.
+// has the voice take the first turn. `--vad` leaves the turns to the server's activity
+// detection: the gate still decides what is sent, and closing it sends silence.
 
 import { dirname, fromFileUrl, join } from "@std/path";
 import { TextLineStream } from "@std/streams";
@@ -89,11 +90,13 @@ if (!apiKey) {
   term.error("GEMINI_API_KEY is not set (it goes in .env)");
   Deno.exit(1);
 }
-const FLAGS = ["--no-liquen", "--say-hi"];
+const FLAGS = ["--no-liquen", "--say-hi", "--vad"];
 /** --no-liquen: the voice alone, to test the audio. No builder, no game window. */
 const noLiquen = Deno.args.includes("--no-liquen");
 /** --say-hi: the voice takes the first turn. */
 const sayHi = Deno.args.includes("--say-hi");
+/** --vad: the server's activity detection takes the turns, no activityStart/End. */
+const vad = Deno.args.includes("--vad");
 const unknown = Deno.args.filter((a) => !FLAGS.includes(a));
 if (unknown.length) {
   term.error(`unknown argument ${unknown.join(" ")} (the ones there are: ${FLAGS.join(" ")})`);
@@ -166,6 +169,10 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
 
 // 1. the language is settled above; 2. liquen
 log.line("boot", `LANG=${Deno.env.get("LANG")} → ${language}, user ${user}`);
+if (vad) {
+  term.dim("--vad: the server's activity detection takes the turns");
+  log.line("boot", "--vad");
+}
 if (noLiquen) {
   term.dim("--no-liquen: no builder, no game window");
   log.line("boot", "--no-liquen");
@@ -361,6 +368,14 @@ let closing:
   | { at: number; why: string; timer: ReturnType<typeof setTimeout>; sent: number }
   | undefined;
 const TAIL_WAIT_MS = 300;
+/**
+ * --vad: the turn ended, and silence goes in the mic's place until the voice answers. The server
+ * ends a turn only on hearing silence: measured 2026-09-25 with a recorded question, streamed
+ * zeros got the transcript in 0.6–1.7 s (3 of 3), nothing after it or `audioStreamEnd` got no
+ * answer in 12 s (4 of 4). Given up after 10 s, not to stream silence for good.
+ */
+let silence: { since: number; sent: number } | undefined;
+const SILENCE_MAX_MS = 10_000;
 /** Chunks sent since the mic last opened. */
 let sent = 0;
 /** When the child's turn (or the say-hi kick) ended with no answer yet. */
@@ -377,6 +392,7 @@ function mic(now: boolean, why: string) {
   open = now;
   if (open) {
     endTurn("the mic opened again"); // a turn still waiting for its tail ends first
+    endSilence("the mic opened");
     sent = 0;
     waitingSince = undefined;
     up.voice?.activityStart();
@@ -400,14 +416,30 @@ function endTurn(because?: string) {
   const { why, sent: before } = closing;
   closing = undefined;
   up.voice?.activityEnd();
-  if (up.voice?.connected) waitingSince = performance.now();
+  if (up.voice?.connected) {
+    waitingSince = performance.now();
+    if (vad) silence = { since: waitingSince, sent: 0 };
+  }
   const cut = because ? `, cut short: ${because}` : "";
   term.dim(`mic closed (${why}) · sent ${chunks(sent)}${cut}`);
-  log.line("mic", `turn ended, sent ${chunks(sent)}, ${sent - before} after closing${cut}`);
+  log.line(
+    "mic",
+    `${vad ? "closed, silence follows" : "turn ended"}, sent ${chunks(sent)}, ${
+      sent - before
+    } after closing${cut}`,
+  );
+}
+
+/** --vad: the silence after the turn stops, `because` the turn was heard or it won't be. */
+function endSilence(because: string) {
+  if (!silence) return;
+  log.line("mic", `silence stopped (${because}) after ${chunks(silence.sent)}`);
+  silence = undefined;
 }
 
 /** The voice's first content since the turn ended. */
 function answered(what: string) {
+  endSilence(`first ${what}`);
   if (waitingSince !== undefined) {
     const ms = Math.round(performance.now() - waitingSince);
     log.line("turn", `first ${what} ${ms} ms after the turn ended`);
@@ -423,8 +455,15 @@ function answered(what: string) {
 up.audio = Audio.start({
   chunk(pcm, at) {
     const sending = open || closing !== undefined;
-    if (sending && up.voice?.sendAudio(pcm)) sent++;
-    log.micAudio(sending ? pcm : new Uint8Array(pcm.length));
+    const zeros = new Uint8Array(pcm.length);
+    if (sending) {
+      if (up.voice?.sendAudio(pcm)) sent++;
+    } else if (silence) {
+      if (performance.now() - silence.since > SILENCE_MAX_MS) {
+        endSilence(`no answer in ${SILENCE_MAX_MS / 1000} s`);
+      } else if (up.voice?.sendAudio(zeros)) silence.sent++;
+    }
+    log.micAudio(sending ? pcm : zeros);
     if (closing && at >= closing.at) endTurn();
   },
   window: (w) => log.mic(w),
@@ -476,7 +515,11 @@ function status() {
     : l.voice
     ? `${BOLD}voice${RESET}     `
     : " ".repeat(10);
-  const gate = open ? `${GREEN}${BOLD}open  ${RESET}` : `${DIM}closed${RESET}`;
+  const gate = open
+    ? `${GREEN}${BOLD}open  ${RESET}`
+    : silence
+    ? `${YELLOW}silent${RESET}`
+    : `${DIM}closed${RESET}`;
   const state = link !== "live"
     ? `${RED}${link}${RESET}`
     : open
@@ -505,6 +548,7 @@ up.voice = await Voice.start({
   apiKey,
   language,
   systemInstruction: instructions,
+  vad,
   on: {
     trace: (d, m) => log.gemini(d, m),
     connected(resumed) {
@@ -519,6 +563,7 @@ up.voice = await Voice.start({
     },
     reconnecting(reason, delayMs) {
       link = "reconnecting";
+      endSilence("reconnecting");
       waitingSince = undefined;
       answering = false;
       term.dim(`gemini ${reason}; reconnecting in ${delayMs} ms`);
@@ -540,7 +585,10 @@ up.voice = await Voice.start({
       answering = false;
       up.audio?.flush();
     },
-    inputTranscript: (t, finished) => term.say("🧒", t, finished),
+    inputTranscript(t, finished) {
+      endSilence("the transcript came");
+      term.say("🧒", t, finished);
+    },
     outputTranscript(t, finished) {
       answered("transcript");
       term.say("🗣️", t, finished);
