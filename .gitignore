@@ -1,7 +1,11 @@
 .env
 node_modules/
+# chiche: one folder per run, and the kid's browser profile
+log/
+.browser/
 # data/ is the agents' volume: track what they are, not what they did
 data/log/
+data/run/
 data/relay/
 data/system/
 data/organization/games/

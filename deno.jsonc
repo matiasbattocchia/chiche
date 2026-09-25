@@ -1,12 +1,19 @@
-// deno.jsonc — the project's own module config. The project ships no runnable code: the
-// CLI is the package, every task runs it, and the org's own connectors/ and processors/
-// import the same package (`@liquen/liquen/connector`). A checkout stands in for the
-// registry with `"links": ["../liquen"]`.
+// deno.jsonc — liquen's tasks (its scaffold), plus chiche: `deno task chiche` runs the
+// voice. A liquen checkout stands in for the registry with `"links": ["../liquen"]`.
 {
+  "links": ["../liquen"],
   "imports": {
-    "@liquen/liquen": "jsr:@liquen/liquen@^0.1.0"
+    "@liquen/liquen": "jsr:@liquen/liquen@^0.1.0",
+    "@google/genai": "npm:@google/genai@2.24.0",
+    "@std/encoding": "jsr:@std/encoding@^1.0.0",
+    "@std/path": "jsr:@std/path@^1.0.0",
+    "@std/streams": "jsr:@std/streams@^1.0.0"
+  },
+  "fmt": {
+    "lineWidth": 100
   },
   "tasks": {
+    "chiche": "deno run -A --env-file=.env main.ts",
     "start": "deno run -A --env-file=.env @liquen/liquen/start",
     "stop": "deno run -A @liquen/liquen/stop",
     "update": "deno run -A @liquen/liquen/update",
