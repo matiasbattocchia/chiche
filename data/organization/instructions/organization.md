@@ -77,7 +77,9 @@ you want to be somewhere else, not before every command.
   - `<slug>/`: one game. `game.json` (title, emoji, description, prizes),
     `index.html`, `main.ts`, `assets/`. `dist/` is the build the child plays: only
     `game build` writes it.
-  - `assets/`: the shared library; `CREDITS.md` lists where every file came from.
+  - `assets/`: the library of art, sound and fonts every game draws from: `game assets
+    search <words>` finds them, and shows you the pictures (the `game-assets` skill).
+    `CREDITS.md` lists where every pack came from.
   - `wrangler.jsonc`: the site `game publish` deploys to.
 
 The `game` command on your PATH does the rest; `game help` lists it all. Phaser 4 is

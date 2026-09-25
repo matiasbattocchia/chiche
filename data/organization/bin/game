@@ -4,6 +4,7 @@ import { chromium } from "npm:playwright-core@1.63.0";
 import { serveDir } from "jsr:@std/http@1/file-server";
 import { copy, exists } from "jsr:@std/fs@1";
 import { basename, dirname, join, relative } from "jsr:@std/path@1";
+import { assets, HELP as ASSETS_HELP } from "./assets.ts";
 
 // the stack (kit, template, deno.json) lives here; the games are a repo of their own
 const ORG = join(import.meta.dirname!, "..");
@@ -32,7 +33,8 @@ const HELP = `game — the org's Phaser games, under ${GAMES}
       --size <WxH>           viewport (default 960x540)
   game publish [slug]        add or update <slug> on the site and deploy it; without a
                              slug, redeploy every published game
-  game docs [topic [file]]   Phaser 4's own guides: the topics, one topic, or a reference`;
+  game docs [topic [file]]   Phaser 4's own guides: the topics, one topic, or a reference
+${ASSETS_HELP}`;
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -513,7 +515,7 @@ async function create(slug?: string) {
   if (!(await exists(GAMES))) {
     // the first game starts the games repo
     await Deno.mkdir(GAMES, { recursive: true });
-    await Deno.writeTextFile(join(GAMES, ".gitignore"), "dist/\n.site/\n.shots/\n.wrangler/\nnode_modules/\n");
+    await Deno.writeTextFile(join(GAMES, ".gitignore"), "dist/\n.site/\n.shots/\n.wrangler/\nnode_modules/\nassets/*/\n");
     await sh(["git", "init", "-q", "-b", "main"]);
     console.log(`${GAMES}: a new git repo for the games`);
   }
@@ -547,6 +549,7 @@ switch (verb) {
   }
   case "publish": await publish(rest[0]); break;
   case "docs": await docs(rest[0], rest[1]); break;
+  case "assets": await assets(rest, { games: GAMES, chromium: chromiumPath }); break;
   case undefined: case "help": case "-h": case "--help": console.log(HELP); break;
   default: fail(`unknown verb ${verb}\n\n${HELP}`);
 }
