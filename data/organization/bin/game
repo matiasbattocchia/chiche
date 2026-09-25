@@ -12,7 +12,6 @@ const CONFIG = join(ORG, "deno.json");
 const KIT = join(ORG, "kit");
 const GAMES = Deno.env.get("GAMES_DIR") ?? join(ORG, "games");
 const PORT = Number(Deno.env.get("GAME_PORT") ?? 7357);
-const NOT_GAMES = new Set(["assets"]);
 
 const HELP = `game — the org's Phaser games, under ${GAMES}
 
@@ -30,7 +29,8 @@ const HELP = `game — the org's Phaser games, under ${GAMES}
       --eval <expr>          evaluate at the end and print as JSON (repeatable)
       --state <json|file>    the save to start from (kit.save: scene, data, difficulty)
       --query <q>            extra URL query, e.g. "debug=1&seed=7"
-      --size <WxH>           viewport (default 960x540)
+      --size <WxH[@d]>       viewport, and its pixel density (default 960x540@1);
+                             a tablet: 1024x768@2, turned: 768x1024@2
   game publish [slug]        add or update <slug> on the site and deploy it; without a
                              slug, redeploy every published game
   game docs [topic [file]]   Phaser 4's own guides: the topics, one topic, or a reference
@@ -67,7 +67,7 @@ async function gameDir(slug: string | undefined) {
 async function slugs() {
   const all: string[] = [];
   for await (const e of Deno.readDir(GAMES)) {
-    if (e.isDirectory && !NOT_GAMES.has(e.name) && !e.name.startsWith(".") &&
+    if (e.isDirectory && !e.name.startsWith(".") &&
       await exists(join(GAMES, e.name, "main.ts"))) all.push(e.name);
   }
   return all.sort();
@@ -196,12 +196,12 @@ async function test(slug: string, args: string[]) {
   }
 
   const server = serveGame(slug, out);
-  const [w, h] = f.size.split("x").map(Number);
+  const [w, h, dpr = 1] = f.size.split(/[x@]/).map(Number);
   const browser = await chromium.launch({
     executablePath: await chromiumPath(),
     args: ["--autoplay-policy=no-user-gesture-required", "--enable-unsafe-swiftshader"],
   });
-  const page = await browser.newPage({ viewport: { width: w, height: h } });
+  const page = await browser.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: dpr });
   let state = f.state;
   if (state && !state.trimStart().startsWith("{")) state = await Deno.readTextFile(state);
   await page.addInitScript(([key, save]) => {
@@ -245,9 +245,9 @@ async function test(slug: string, args: string[]) {
       else if (name === "click") {
         const [x, y] = arg.split(",").map(Number);
         const at = await page.evaluate(([x, y]) => {
-          const g = (globalThis as any).game;
+          const g = (globalThis as any).game, s = (globalThis as any).kit.screen();
           const r = g.canvas.getBoundingClientRect();
-          return [r.left + x * r.width / g.scale.width, r.top + y * r.height / g.scale.height];
+          return [r.left + (x - s.x) * r.width / s.width, r.top + (y - s.y) * r.height / s.height];
         }, [x, y]);
         await page.mouse.click(at[0], at[1]);
       } else {
@@ -396,7 +396,7 @@ async function serve() {
   for await (const ev of Deno.watchFs(GAMES)) {
     for (const path of ev.paths) {
       const [slug, folder] = relative(GAMES, path).split("/");
-      if (folder !== "dist" || !slug || slug.startsWith(".") || NOT_GAMES.has(slug)) continue;
+      if (folder !== "dist" || !slug || slug.startsWith(".")) continue;
       pending.add(slug);
     }
     if (!pending.size) continue;
@@ -515,7 +515,7 @@ async function create(slug?: string) {
   if (!(await exists(GAMES))) {
     // the first game starts the games repo
     await Deno.mkdir(GAMES, { recursive: true });
-    await Deno.writeTextFile(join(GAMES, ".gitignore"), "dist/\n.site/\n.shots/\n.wrangler/\nnode_modules/\nassets/*/\n");
+    await Deno.writeTextFile(join(GAMES, ".gitignore"), "dist/\n.site/\n.shots/\n.wrangler/\nnode_modules/\n");
     await sh(["git", "init", "-q", "-b", "main"]);
     console.log(`${GAMES}: a new git repo for the games`);
   }
@@ -529,7 +529,7 @@ star-catcher. Rewrite game.json (title, emoji, description, prizes) and Play.`);
 // ── main ────────────────────────────────────────────────────────────────────
 
 const [verb, ...rest] = Deno.args;
-if (!["new", "docs", "help", "-h", "--help", undefined].includes(verb) && !(await exists(GAMES))) {
+if (!["new", "docs", "assets", "help", "-h", "--help", undefined].includes(verb) && !(await exists(GAMES))) {
   fail(`no games at ${GAMES} yet: \`game new <slug>\` starts them there (or set GAMES_DIR)`);
 }
 switch (verb) {
@@ -549,7 +549,7 @@ switch (verb) {
   }
   case "publish": await publish(rest[0]); break;
   case "docs": await docs(rest[0], rest[1]); break;
-  case "assets": await assets(rest, { games: GAMES, chromium: chromiumPath }); break;
+  case "assets": await assets(rest, { games: GAMES, library: join(ORG, "assets"), chromium: chromiumPath }); break;
   case undefined: case "help": case "-h": case "--help": console.log(HELP); break;
   default: fail(`unknown verb ${verb}\n\n${HELP}`);
 }

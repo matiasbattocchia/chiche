@@ -283,11 +283,75 @@ export function glow(
   return target.filters!.internal.addGlow(color, strength, 0);
 }
 
+// ── screen ──────────────────────────────────────────────────────────────────
+
+// A game is designed for one area, 960×540 unless startGame says otherwise. The canvas
+// covers the whole window at the screen's own pixel density (a tablet's is 2), and every
+// scene's main camera zooms so the design area fills it, centered: a screen of another
+// shape (a 4:3 tablet, a turned one) shows more of the world around it instead of bars.
+const design = { width: 960, height: 540 };
+let scaler: Phaser.Scale.ScaleManager | undefined;
+
+/** Canvas pixels per CSS pixel: the screen's own, up to 2 (more costs more than it shows). */
+const density = () => Math.min(devicePixelRatio || 1, 2);
+
+/** Canvas pixels per game unit. */
+function zoom() {
+  return scaler ? Math.min(scaler.width / design.width, scaler.height / design.height) : 1;
+}
+
+/**
+ * The part of the world on screen, in game units, while the camera hasn't moved: the
+ * design area (0,0 to width×height) plus whatever a screen of another shape shows around
+ * it, so `x` and `y` can be negative. Place what hugs the screen's edges, like a HUD or a
+ * background, with `onResize`.
+ */
+export function screen() {
+  const z = zoom();
+  const w = (scaler?.width ?? design.width) / z, h = (scaler?.height ?? design.height) / z;
+  return new Phaser.Geom.Rectangle((design.width - w) / 2, (design.height - h) / 2, w, h);
+}
+
+/**
+ * `place(screen())` now and again whenever the screen changes shape (a tablet turned, a
+ * window resized), for as long as the scene runs.
+ */
+export function onResize(scene: Phaser.Scene, place: (screen: Phaser.Geom.Rectangle) => void) {
+  const again = () => place(screen());
+  again();
+  scene.scale.on(Phaser.Scale.Events.RESIZE, again);
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => scene.scale.off(Phaser.Scale.Events.RESIZE, again));
+}
+
+// Every scene's main camera starts zoomed to fit and centered on the design area; on a
+// resize it refits, keeping whatever it was looking at in the middle. Cameras a game adds
+// itself are left alone.
+type Cameras = Phaser.Cameras.Scene2D.CameraManager & { start(): void; onResize(...args: unknown[]): void };
+const cameras = Phaser.Cameras.Scene2D.CameraManager.prototype as Cameras;
+const { start: startCameras, onResize: resizeCameras } = cameras;
+cameras.start = function () {
+  startCameras.call(this);
+  this.main.setZoom(zoom()).centerOn(design.width / 2, design.height / 2);
+};
+cameras.onResize = function (...args) {
+  const cam = this.main, x = cam.scrollX + cam.width / 2, y = cam.scrollY + cam.height / 2;
+  resizeCameras.apply(this, args);
+  cam.setZoom(zoom()).centerOn(x, y);
+};
+
+// Text is drawn to a texture before the camera zooms it: drawn at the zoom, it stays sharp.
+const factory = Phaser.GameObjects.GameObjectFactory.prototype;
+const addText = factory.text;
+factory.text = function (x, y, text, style = {}) {
+  return addText.call(this, x, y, text, { resolution: Math.max(1, zoom()), ...style });
+};
+
 // ── boot ────────────────────────────────────────────────────────────────────
 
 export const kit = {
   save: undefined as unknown as Save,
   difficulty: undefined as unknown as Difficulty,
+  screen,
 };
 
 /**
@@ -318,19 +382,30 @@ export function startGame(meta: Meta, scenes: Phaser.Types.Scenes.SceneType[], o
   document.title = `${meta.emoji} ${meta.title}`;
 
   const seed = params.get("seed");
+  design.width = o.width ?? 960;
+  design.height = o.height ?? 540;
+  const canvasSize = () => [Math.round(innerWidth * density()), Math.round(innerHeight * density())] as const;
+  const [width, height] = canvasSize();
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: "game",
-    width: o.width ?? 960,
-    height: o.height ?? 540,
     backgroundColor: o.background ?? "#1b4332",
     pixelArt: o.pixelArt ?? false,
     banner: false,
     seed: seed ? [seed] : undefined,
-    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    // the canvas is sized here, at the screen's density, and shown at the window's size
+    scale: { mode: Phaser.Scale.NONE, width, height, zoom: 1 / density() },
     input: { gamepad: true },
-    physics: { default: "arcade", arcade: { debug, gravity: { x: 0, y: o.gravity ?? 0 } } },
+    physics: {
+      default: "arcade",
+      arcade: { debug, gravity: { x: 0, y: o.gravity ?? 0 }, width: design.width, height: design.height },
+    },
     scene: scenes,
+  });
+  scaler = game.scale;
+  addEventListener("resize", () => {
+    game.scale.setZoom(1 / density());
+    game.scale.resize(...canvasSize());
   });
   Object.assign(globalThis, { game, kit });
 

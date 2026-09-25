@@ -11,7 +11,7 @@ attribution-required licenses unless the credit shows in the game.
 
 ## The library
 
-`games/assets/` is the library every game draws from, like a music program's sound library:
+`assets/`, beside the kit, is the library every game draws from, like a music program's sound library:
 a core set to start with, and packs imported to go beyond. `game assets` lists its packs.
 
 - **Core** (`game assets import core`, already in place):
@@ -49,6 +49,10 @@ a sound you can't.
   { key: "walk_b" }], frameRate: 8, repeat: -1 })`.
 - **Drawn in code**: Phaser `Graphics` plus `generateTexture` in the boot scene. Shapes,
   stars, balls, simple characters. Good enough for a first version, and often for the last.
+  A generated texture is drawn once, at its size in game units, so a tablet's zoom softens
+  it; a `Graphics` left on screen stays sharp.
+- **Sharpness**: a tablet shows the game zoomed about 2×. An image shown bigger than its
+  pixels looks soft there: prefer the larger file, and scale it down.
 - **Sound**: the kit's `sfx()` has built-in sounds, and `makeSound` makes new ones (the
   `game-sound` skill). The library's sounds are for what a synth can't do: footsteps, a
   glass, a punch. You can't hear any of them, so choose by name and length, and ask the

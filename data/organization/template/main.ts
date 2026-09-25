@@ -1,4 +1,4 @@
-import { burst, flash, glow, kit, next, Phaser, pop, prize, sfx, squash, startGame } from "kit";
+import { burst, flash, glow, kit, next, onResize, Phaser, pop, prize, screen, sfx, squash, startGame } from "kit";
 import meta from "./game.json" with { type: "json" };
 
 const W = 960, H = 540;
@@ -58,7 +58,8 @@ class Play extends Phaser.Scene {
     this.basket = this.physics.add.image(W / 2, H - 40, "basket").setImmovable(true);
     this.basket.setCollideWorldBounds(true);
     this.stars = this.physics.add.group();
-    this.counter = this.add.text(20, 16, "", big(40));
+    this.counter = this.add.text(0, 0, "", big(40));
+    onResize(this, (s) => this.counter.setPosition(s.x + 20, s.y + 16)); // the screen's corner
     this.count(this.caught); // from the save: a reload keeps the stars
 
     this.physics.add.overlap(this.basket, this.stars, (_b, s) => {
@@ -67,7 +68,7 @@ class Play extends Phaser.Scene {
       star.destroy();
       this.catch();
     });
-    this.input.on("pointermove", (p: Phaser.Input.Pointer) => this.basket.x = p.x);
+    this.input.on("pointermove", (p: Phaser.Input.Pointer) => this.basket.x = p.worldX);
     this.drop();
   }
 
@@ -116,7 +117,7 @@ class Play extends Phaser.Scene {
     const dx = (this.keys.left.isDown || pad?.left ? -1 : 0) + (this.keys.right.isDown || pad?.right ? 1 : 0);
     this.basket.setVelocityX(dx * 600);
     for (const star of this.stars.getChildren() as Phaser.Physics.Arcade.Image[]) {
-      if (star.y > H + 30) this.miss(star);
+      if (star.y > screen().bottom + 30) this.miss(star);
     }
   }
 }

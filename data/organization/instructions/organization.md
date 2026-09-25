@@ -68,18 +68,18 @@ Phaser 4 in TypeScript, built with Deno. In `organization/`, where chiche starts
 you want to be somewhere else, not before every command.
 
 - `kit/mod.ts`: shared by every game, imported as `"kit"`. `startGame`, `next`,
-  `kit.save`, `kit.difficulty`, `sfx`, `makeSound`, `prize`, and the effects (`pop`, `squash`,
+  `kit.save`, `kit.difficulty`, `sfx`, `makeSound`, `prize`, `screen`, `onResize`, and the effects (`pop`, `squash`,
   `shake`, `flash`, `burst`, `hitStop`, `glow`: the `game-juice` skill). Read it before
   your first game.
 - `template/`: the game `game new` copies (a star-catcher that uses the whole kit).
 - `deno.json`: pins Phaser and maps `"kit"`.
+- `assets/`: the library of art, sound and fonts every game draws from: `game assets
+  search <words>` finds them, and shows you the pictures (the `game-assets` skill).
+  `CREDITS.md` lists where every pack came from.
 - `games/`: the games, a git repo of their own.
   - `<slug>/`: one game. `game.json` (title, emoji, description, prizes),
-    `index.html`, `main.ts`, `assets/`. `dist/` is the build the child plays: only
-    `game build` writes it.
-  - `assets/`: the library of art, sound and fonts every game draws from: `game assets
-    search <words>` finds them, and shows you the pictures (the `game-assets` skill).
-    `CREDITS.md` lists where every pack came from.
+    `index.html`, `main.ts`, `assets/` (the files it uses, copied from the library).
+    `dist/` is the build the child plays: only `game build` writes it.
   - `wrangler.jsonc`: the site `game publish` deploys to.
 
 The `game` command on your PATH does the rest; `game help` lists it all. Phaser 4 is
@@ -101,6 +101,15 @@ for all of them:
   one the game makes with `makeSound`. You can't hear, so the child tunes the sounds you
   make: the `game-sound` skill.
 - A HUD or overlay scene gets a key starting with `_`.
+- Games are made on a laptop and played on laptops and tablets, sideways or turned. Design
+  for 960×540 (`W`, `H`): the kit zooms each scene's camera so that area fills the screen,
+  centered and at the screen's own sharpness, and a screen of another shape shows more of
+  the world around it, never bars. Keep what matters inside it and let the background
+  run past it. What hugs the screen's edges, like the HUD, goes where `onResize(scene,
+  (screen) => …)` says, and follows when the tablet turns. Where a finger or the mouse is
+  in the game is `pointer.worldX` and `worldY`; `x` and `y` are the canvas's pixels. The
+  camera's zoom is already the fit: to zoom in, multiply it. `game test --size
+  1024x768@2` plays it on a tablet.
 
 ## The loop
 

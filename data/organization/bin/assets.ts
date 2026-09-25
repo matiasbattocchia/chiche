@@ -1,6 +1,6 @@
 // game assets — the library every game draws art, sound and fonts from: a core set to start
 // with (`import core`), imports from free sources to go beyond. Each pack is a folder under
-// games/assets/ with a pack.json that names every asset, so the builder finds them by words.
+// assets/ with a pack.json that names every asset, so the builder finds them by words.
 import { chromium } from "npm:playwright-core@1.63.0";
 import { exists, walk } from "jsr:@std/fs@1";
 import { basename, dirname, extname, join, relative } from "jsr:@std/path@1";
@@ -11,13 +11,13 @@ type Kind = "image" | "sound" | "font";
 interface Entry {
   name: string;
   kind: Kind;
-  files: string[]; // relative to games/assets
+  files: string[]; // relative to assets/
   tags: string[];
   size?: string; // 256×256, 0.4 s
   glyph?: string; // the emoji it is
 }
 
-/** games/assets/<id>/pack.json */
+/** assets/<id>/pack.json */
 interface Pack {
   id: string;
   title: string;
@@ -30,6 +30,8 @@ interface Pack {
 
 interface Env {
   games: string;
+  /** organization/assets: the packs, beside the kit, shared by every game */
+  library: string;
   chromium: () => Promise<string>;
 }
 
@@ -129,7 +131,7 @@ async function getText(url: string) {
 
 async function readPacks(env: Env) {
   const packs: Pack[] = [];
-  const root = join(env.games, "assets");
+  const root = env.library;
   if (!(await exists(root))) return packs;
   for await (const e of Deno.readDir(root)) {
     const file = join(root, e.name, "pack.json");
@@ -140,7 +142,7 @@ async function readPacks(env: Env) {
 
 /** Write a pack and the credits for the whole library. */
 async function savePack(env: Env, pack: Pack) {
-  const root = join(env.games, "assets");
+  const root = env.library;
   await Deno.writeTextFile(join(root, pack.id, "pack.json"), JSON.stringify(pack, null, 1) + "\n");
   const rows = (await readPacks(env)).map((p) => `| ${p.title} (${p.id}) | ${p.source} | ${p.license} | ${p.fetched} |`);
   await Deno.writeTextFile(join(root, "CREDITS.md"), `# Credits
@@ -202,7 +204,7 @@ async function importKenney(env: Env, slug: string, opaque: boolean) {
     });
 
     const id = `kenney-${slug}`;
-    const dest = join(env.games, "assets", id);
+    const dest = join(env.library,id);
     await Deno.remove(dest, { recursive: true }).catch(() => {});
     await Deno.mkdir(dest, { recursive: true });
     const license = all.find((f) => /^license\.txt$/i.test(basename(f)));
@@ -243,7 +245,7 @@ async function importKenney(env: Env, slug: string, opaque: boolean) {
       // a name more than a dozen sounds share tells none of them apart (jingles_NES01…17)
       if (g.kind === "sound" && g.files.length > MAX_VARIANTS && !opaque) {
         left += g.files.length;
-        for (const f of g.files) await Deno.remove(join(env.games, "assets", f));
+        for (const f of g.files) await Deno.remove(join(env.library,f));
         continue;
       }
       entries.push({
@@ -251,7 +253,7 @@ async function importKenney(env: Env, slug: string, opaque: boolean) {
         kind: g.kind,
         files: g.files,
         tags: g.tags,
-        size: await sizeOf(join(env.games, "assets", g.files[0]), g.kind),
+        size: await sizeOf(join(env.library,g.files[0]), g.kind),
       });
     }
     if (!entries.length) {
@@ -299,7 +301,7 @@ async function fluentIndex(dest: string): Promise<FluentMeta[]> {
 
 async function importFluent(env: Env, wanted: string[]) {
   const id = "fluent-emoji";
-  const dest = join(env.games, "assets", id);
+  const dest = join(env.library,id);
   const index = await fluentIndex(dest);
   const groups = [...new Set(index.map((m) => m.group))].sort();
   const chosen = new Map<string, FluentMeta>();
@@ -352,7 +354,7 @@ async function importFont(env: Env, family: string) {
   }
   if (!files) throw new Error(`font: no Google Fonts family "${family}"`);
   const id = `font-${dir}`;
-  const dest = join(env.games, "assets", id);
+  const dest = join(env.library,id);
   await Deno.remove(dest, { recursive: true }).catch(() => {});
   const fonts = files.filter((f) => kindOf(f.name) === "font" && !/italic/i.test(f.name));
   const entries: Entry[] = [];
@@ -439,7 +441,7 @@ Kenney's packs (\`fetch\` the page), \`game assets import kenney <pack>\` brings
 
 /** The images side by side, numbered like the list: a picture of the choices to aread. */
 async function contactSheet(env: Env, items: { n: number; name: string; file: string }[], label: string) {
-  const root = join(env.games, "assets");
+  const root = env.library;
   const cells = await Promise.all(items.map(async (it) => {
     const b64 = btoa(Array.from(await Deno.readFile(join(root, it.file)), (c) => String.fromCharCode(c)).join(""));
     return `<figure><div><img src="data:image/png;base64,${b64}"></div><figcaption>${it.n}. ${it.name}</figcaption></figure>`;
@@ -469,9 +471,9 @@ async function use(env: Env, slug: string | undefined, files: string[]) {
   if (!slug || !files.length) throw new Error("game assets use <slug> <file>...");
   const game = join(env.games, slug);
   if (!(await exists(join(game, "main.ts")))) throw new Error(`no game called ${slug}`);
-  const root = join(env.games, "assets");
+  const root = env.library;
   for (const f of files) {
-    const rel = relative(root, join(root, f.replace(/^(games\/)?assets\//, "")));
+    const rel = relative(root, join(root, f.replace(/^assets\//, "")));
     const src = join(root, rel);
     if (rel.startsWith("..") || !(await exists(src))) throw new Error(`no ${rel} in the library`);
     const pack = rel.split("/")[0];

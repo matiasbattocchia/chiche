@@ -9,6 +9,9 @@ data/run/
 data/relay/
 data/system/
 data/organization/games/
+# the asset library's packs: `game assets import` fetches them again; CREDITS.md is tracked
+data/organization/assets/*/
+data/organization/assets/.sheets/
 data/agents/*/*
 !data/agents/*/instructions/
 !data/agents/*/skills/
