@@ -17,7 +17,7 @@ export type Meta = {
 const params = new URLSearchParams(location.search);
 /** `?debug=1`: physics bodies drawn, and the overlay in the corner. */
 export const debug = params.has("debug");
-/** Under `game serve` and `game run`: a reload resumes the scene it left. */
+/** Under `game serve` and `game test`: a reload resumes the scene it left. */
 const dev = Boolean((globalThis as { __DEV__?: boolean }).__DEV__);
 
 // ── saving ──────────────────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ export class Difficulty {
 let lastSuccess = -Infinity;
 let lastPrize = -Infinity;
 
-/** Mark a prize as given. It must follow a successful try; `game run` flags one that doesn't. */
+/** Mark a prize as given. It must follow a successful try; `game test` flags one that doesn't. */
 export function prize(name: string) {
   if (lastSuccess <= lastPrize) console.warn(`[prize] ${name} given without a successful try`);
   else console.log(`[prize] ${name}`);
@@ -146,7 +146,7 @@ export const kit = {
 };
 
 /**
- * Leave the boot scene for `key` — or, under `game serve` and `game run`, for the
+ * Leave the boot scene for `key` — or, under `game serve` and `game test`, for the
  * scene a reload interrupted, so a rebuild doesn't send the kid back to the title.
  */
 export function next(from: Phaser.Scene, key: string, data?: object) {

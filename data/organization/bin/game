@@ -1,9 +1,9 @@
 #!/usr/bin/env -S deno run -A --no-config
-// game — make, check, run and publish the org's Phaser games. `game help` lists the verbs.
+// game — make, check, test, serve and publish the org's Phaser games. `game help` lists the verbs.
 import { chromium } from "npm:playwright-core@1.63.0";
 import { serveDir } from "jsr:@std/http@1/file-server";
 import { copy, exists } from "jsr:@std/fs@1";
-import { basename, join, relative } from "jsr:@std/path@1";
+import { basename, dirname, join, relative } from "jsr:@std/path@1";
 
 // the stack (kit, template, deno.json) lives here; the games are a repo of their own
 const ORG = join(import.meta.dirname!, "..");
@@ -17,10 +17,12 @@ const HELP = `game — the org's Phaser games, under ${GAMES}
 
   game new <slug>            copy the template into <slug>/
   game check [slug]          deno check + deno lint (every game when no slug)
-  game build <slug>          bundle into <slug>/dist/
-  game serve                 dev server on :${PORT}, every game at /<slug>/; rebuilds and
-                             reloads the page on every save, keeping the kid's progress
-  game run <slug> [options]  build, open in headless Chromium, report what happened
+  game build <slug>          bundle into <slug>/dist/ — what the kid's screen serves;
+                             replaced whole, and only when the bundle succeeds
+  game serve                 the kid's screen: serves every game's dist/ on :${PORT} at
+                             /<slug>/, opens it in a Chromium app window, and restarts a game
+                             there when its dist/ changes. Builds nothing. chiche runs it
+  game test <slug> [options] build privately, play in headless Chromium, report
       --for <s>              seconds to watch after the steps (default 2)
       --keys "<steps>"       space-separated: Right:800 (hold ms) · Space (tap) ·
                              wait:500 · click:480,300 (game coords) · shot (screenshot)
@@ -75,19 +77,36 @@ async function readMeta(slug: string) {
 
 // ── build ───────────────────────────────────────────────────────────────────
 
-/** Bundle a game into `out`: main.js, index.html, assets/. Unminified unless publishing. */
+/**
+ * Bundle a game into `out`: main.js, index.html, assets/. Unminified unless publishing.
+ * `out` is replaced whole, and only on success: the bundle lands in a temporary folder
+ * beside it, and a good one is renamed in. A failed build leaves `out` as it was, so the
+ * kid's screen (which serves dist/) never sees a half-built game. Linux `rename` can't
+ * replace a non-empty directory, hence the old one is renamed aside first.
+ */
 async function build(slug: string, out = join(GAMES, slug, "dist"), minify = false) {
   const dir = await gameDir(slug);
   const t0 = performance.now();
-  await Deno.remove(out, { recursive: true }).catch(() => {});
-  await Deno.mkdir(out, { recursive: true });
-  const cmd = ["deno", "bundle", "--config", CONFIG, "--platform", "browser", "-o", join(out, "main.js"), join(dir, "main.ts")];
-  if (minify) cmd.splice(2, 0, "--minify");
-  const r = await sh(cmd, { quiet: true });
-  if (!r.ok) return { ok: false, text: r.text };
-  await Deno.copyFile(join(dir, "index.html"), join(out, "index.html"));
-  if (await exists(join(dir, "assets"))) await copy(join(dir, "assets"), join(out, "assets"));
-  return { ok: true, text: `built ${slug} in ${Math.round(performance.now() - t0)} ms` };
+  await Deno.mkdir(dirname(out), { recursive: true });
+  const fresh = await Deno.makeTempDir({ dir: dirname(out), prefix: `.${basename(out)}-` });
+  try {
+    const cmd = ["deno", "bundle", "--config", CONFIG, "--platform", "browser", "-o", join(fresh, "main.js"), join(dir, "main.ts")];
+    if (minify) cmd.splice(2, 0, "--minify");
+    const r = await sh(cmd, { quiet: true });
+    if (!r.ok) return { ok: false, text: r.text };
+    await Deno.copyFile(join(dir, "index.html"), join(fresh, "index.html"));
+    if (await exists(join(dir, "assets"))) await copy(join(dir, "assets"), join(fresh, "assets"));
+    const old = await Deno.makeTempDir({ dir: dirname(out), prefix: `.${basename(out)}-old-` });
+    await Deno.remove(old);
+    const had = await exists(out);
+    if (had) await Deno.rename(out, old);
+    await Deno.chmod(fresh, 0o755); // makeTempDir's 0700, opened up like any folder
+    await Deno.rename(fresh, out);
+    if (had) await Deno.remove(old, { recursive: true });
+    return { ok: true, text: `built ${slug} in ${Math.round(performance.now() - t0)} ms` };
+  } finally {
+    await Deno.remove(fresh, { recursive: true }).catch(() => {});
+  }
 }
 
 // ── check ───────────────────────────────────────────────────────────────────
@@ -100,9 +119,14 @@ async function check(slug?: string) {
   if (!types.ok || !lint.ok) Deno.exit(1);
 }
 
-// ── run ─────────────────────────────────────────────────────────────────────
+// ── test ────────────────────────────────────────────────────────────────────
 
-async function chromiumPath() {
+/**
+ * A Chromium to run. `headed` needs a full browser: `GAME_CHROMIUM`, else /usr/bin/chromium,
+ * else Playwright's cached `chromium-*`. Never `chrome-headless-shell`, which can't open a
+ * window; `game test` may still use it.
+ */
+async function chromiumPath(headed = false) {
   const env = Deno.env.get("GAME_CHROMIUM");
   if (env) return env;
   if (await exists("/usr/bin/chromium")) return "/usr/bin/chromium";
@@ -110,7 +134,8 @@ async function chromiumPath() {
   const found: string[] = [];
   if (await exists(cache)) {
     for await (const e of Deno.readDir(cache)) {
-      if (e.name.startsWith("chromium_headless_shell-")) {
+      if (e.name.startsWith("chromium-")) found.push(join(cache, e.name, "chrome-linux64/chrome"));
+      else if (!headed && e.name.startsWith("chromium_headless_shell-")) {
         found.push(join(cache, e.name, "chrome-headless-shell-linux64/chrome-headless-shell"));
       }
     }
@@ -157,12 +182,18 @@ const SAFE_JSON = `(v) => { const seen = new WeakSet();
   };
   return JSON.stringify(walk(v, 0)); }`;
 
-async function run(slug: string, args: string[]) {
+/** Play the game headless and report. Builds into a temporary folder: the kid's dist/ is
+ *  untouched, whatever the builder tries here. */
+async function test(slug: string, args: string[]) {
   const f = parseFlags(args);
-  const b = await build(slug);
-  if (!b.ok) fail(`build failed:\n${b.text}`);
+  const out = await Deno.makeTempDir({ prefix: `game-test-${slug}-` });
+  const b = await build(slug, out);
+  if (!b.ok) {
+    await Deno.remove(out, { recursive: true }).catch(() => {});
+    fail(`build failed:\n${b.text}`);
+  }
 
-  const server = serveGame(slug, join(GAMES, slug, "dist"));
+  const server = serveGame(slug, out);
   const [w, h] = f.size.split("x").map(Number);
   const browser = await chromium.launch({
     executablePath: await chromiumPath(),
@@ -250,6 +281,7 @@ async function run(slug: string, args: string[]) {
   }
   await browser.close();
   await server.shutdown();
+  await Deno.remove(out, { recursive: true }).catch(() => {});
 
   console.log(b.text);
   if (!booted) errors.unshift("the game never booted (no window.game.isBooted after 8 s)");
@@ -273,47 +305,28 @@ async function run(slug: string, args: string[]) {
 
 // ── serve ───────────────────────────────────────────────────────────────────
 
-const RELOAD = `<script>globalThis.__DEV__ = true;
-new EventSource("/__reload?game=" + location.pathname.split("/")[1]).onmessage = () => location.reload();
-</script>`;
+const DEV = `<script>globalThis.__DEV__ = true;</script>`;
 
+/** The kid's browser: a persistent profile, so `kit.save` outlives a restart of chiche. */
+const BROWSER = Deno.env.get("GAME_BROWSER_DIR") ?? join(ORG, "..", "..", ".browser");
+
+/**
+ * The kid's screen. Serves whatever is in every game's dist/ (only `game build` writes
+ * it), opens the list in a Chromium app window, and when a game's dist/ is swapped in,
+ * navigates the window to that game — a reload when it's already there, resuming from
+ * `kit.save`. Builds nothing, ever.
+ */
 async function serve() {
   const ours = await fetch(`http://127.0.0.1:${PORT}/__serve`).then((r) => r.text(), () => null);
   if (ours === "game serve") return console.log(`already running: http://localhost:${PORT}/`);
   if (ours !== null) fail(`port ${PORT} is taken by something else: GAME_PORT=<other> game serve`);
 
-  const clients = new Map<string, Set<ReadableStreamDefaultController>>();
-  const reload = (slug: string) => {
-    for (const c of clients.get(slug) ?? []) c.enqueue(new TextEncoder().encode("data: reload\n\n"));
-  };
-  const rebuild = async (slug: string) => {
-    const r = await build(slug);
-    // a broken build leaves the old one playing: the kid never sees a crash
-    if (r.ok) reload(slug);
-    console.log(`${new Date().toLocaleTimeString()} ${r.ok ? r.text : `BUILD FAILED ${slug}:\n${r.text}`}`);
-  };
-  for (const s of await slugs()) await rebuild(s);
+  const home = `http://localhost:${PORT}/`;
+  const stamp = () => new Date().toLocaleTimeString("en-GB");
 
-  Deno.serve({ port: PORT, onListen: () => console.log(`http://localhost:${PORT}/`) }, async (req) => {
+  Deno.serve({ port: PORT, onListen: () => console.log(home) }, async (req) => {
     const url = new URL(req.url);
     if (url.pathname === "/__serve") return new Response("game serve");
-    if (url.pathname === "/__reload") {
-      const slug = url.searchParams.get("game") ?? "";
-      let me: ReadableStreamDefaultController;
-      return new Response(
-        new ReadableStream({
-          start(c) {
-            me = c;
-            if (!clients.has(slug)) clients.set(slug, new Set());
-            clients.get(slug)!.add(c);
-          },
-          cancel() {
-            clients.get(slug)?.delete(me);
-          },
-        }),
-        { headers: { "content-type": "text/event-stream", "cache-control": "no-store" } },
-      );
-    }
     const slug = url.pathname.split("/")[1];
     if (!slug) {
       const list = await Promise.all((await slugs()).map(async (s) => {
@@ -327,26 +340,74 @@ async function serve() {
     const res = await serveDir(req, { fsRoot: join(GAMES, slug, "dist"), urlRoot: slug, quiet: true });
     res.headers.set("cache-control", "no-store");
     if (!res.headers.get("content-type")?.startsWith("text/html")) return res;
-    const html = (await res.text()).replace("<head>", `<head>${RELOAD}`);
+    const html = (await res.text()).replace("<head>", `<head>${DEV}`);
     return new Response(html, { status: res.status, headers: res.headers });
   });
 
+  // the window: opened at start and again whenever it's found closed
+  type Page = Awaited<ReturnType<typeof chromium.launchPersistentContext>>["pages"] extends
+    () => (infer P)[] ? P : never;
+  let page: Page | undefined;
+  const window = async (): Promise<Page> => {
+    if (page && !page.isClosed()) return page;
+    const context = await chromium.launchPersistentContext(BROWSER, {
+      executablePath: await chromiumPath(true),
+      headless: false,
+      viewport: null,
+      // Playwright passes --no-sandbox by default; the system Chromium refuses it with a
+      // banner on the kid's screen. Its own sandbox works
+      chromiumSandbox: true,
+      ignoreDefaultArgs: ["--enable-automation"],
+      // an app window: no address bar or tabs, but a normal window for the compositor
+      // (a kiosk goes fullscreen, which on sway hides chiche's terminal)
+      args: [`--app=${home}`, "--autoplay-policy=no-user-gesture-required", "--enable-unsafe-swiftshader"],
+    });
+    page = context.pages()[0] ?? await context.newPage();
+    context.on("close", () => {
+      page = undefined;
+      console.log(`${stamp()} the window was closed; the next build opens it again`);
+    });
+    return page;
+  };
+  const show = async (path: string) => {
+    try {
+      const p = await window();
+      await p.goto(home + path, { waitUntil: "commit" });
+    } catch (e) {
+      console.log(`${stamp()} browser: ${e instanceof Error ? e.message.split("\n")[0] : e}`);
+    }
+  };
+  await show("");
+  // Playwright takes over SIGTERM/SIGINT in Node and only closes browsers; the exit is ours
+  for (const sig of ["SIGTERM", "SIGINT"] as const) {
+    Deno.addSignalListener(sig, () => {
+      const p = page;
+      page = undefined;
+      (p ? p.context().close() : Promise.resolve()).catch(() => {}).finally(() => Deno.exit(0));
+    });
+  }
+
+  // the restart: a swapped-in dist/ sends the window to that game. A swap is a few
+  // filesystem events in a row, collapsed into one navigation per game
   let pending = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | undefined;
-  for await (const ev of Deno.watchFs([GAMES, KIT])) {
+  for await (const ev of Deno.watchFs(GAMES)) {
     for (const path of ev.paths) {
-      const parts = relative(GAMES, path).split("/");
-      if (parts.some((p) => p === "dist" || (p.startsWith(".") && p !== ".."))) continue;
-      if (!relative(KIT, path).startsWith("..")) (await slugs()).forEach((s) => pending.add(s));
-      else if ((await slugs()).includes(parts[0])) pending.add(parts[0]);
+      const [slug, folder] = relative(GAMES, path).split("/");
+      if (folder !== "dist" || !slug || slug.startsWith(".") || NOT_GAMES.has(slug)) continue;
+      pending.add(slug);
     }
     if (!pending.size) continue;
     clearTimeout(timer);
     timer = setTimeout(async () => {
       const todo = pending;
       pending = new Set();
-      for (const s of todo) await rebuild(s);
-    }, 200);
+      for (const s of todo) {
+        if (!(await exists(join(GAMES, s, "dist", "index.html")))) continue;
+        console.log(`${stamp()} ${s}: restarted on the kid's screen`);
+        await show(`${s}/`);
+      }
+    }, 300);
   }
 }
 
@@ -411,6 +472,11 @@ ${cards.join("\n")}
 
 // ── docs ────────────────────────────────────────────────────────────────────
 
+/** Phaser ships its guides with CRLF line endings; the reader gets plain newlines. */
+async function guide(path: string) {
+  return (await Deno.readTextFile(path)).replaceAll("\r\n", "\n");
+}
+
 async function docs(topic?: string, file?: string) {
   const config = JSON.parse(await Deno.readTextFile(CONFIG));
   const version = (config.imports.phaser as string).split("@").at(-1)!;
@@ -420,7 +486,7 @@ async function docs(topic?: string, file?: string) {
   if (!topic) {
     const entries = [];
     for await (const e of Deno.readDir(skills)) {
-      const text = await Deno.readTextFile(join(skills, e.name, "SKILL.md"));
+      const text = await guide(join(skills, e.name, "SKILL.md"));
       const desc = text.match(/description: "?(.*?)(?: Triggers on:|"?\n)/)?.[1] ?? "";
       entries.push(`${e.name.padEnd(26)} ${desc.replace(/^Use this skill when /, "")}`);
     }
@@ -429,8 +495,8 @@ async function docs(topic?: string, file?: string) {
   }
   const dir = join(skills, topic);
   if (!(await exists(dir))) fail(`no topic ${topic}: \`game docs\` lists them`);
-  if (file) return console.log(await Deno.readTextFile(join(dir, "references", basename(file))));
-  console.log(await Deno.readTextFile(join(dir, "SKILL.md")));
+  if (file) return console.log(await guide(join(dir, "references", basename(file))));
+  console.log(await guide(join(dir, "SKILL.md")));
   if (await exists(join(dir, "references"))) {
     const refs = [];
     for await (const e of Deno.readDir(join(dir, "references"))) refs.push(e.name);
@@ -474,9 +540,9 @@ switch (verb) {
     break;
   }
   case "serve": await serve(); break;
-  case "run": {
-    if (!rest[0] || rest[0].startsWith("-")) fail("game run <slug> [options]");
-    await run(rest[0], rest.slice(1));
+  case "test": {
+    if (!rest[0] || rest[0].startsWith("-")) fail("game test <slug> [options]");
+    await test(rest[0], rest.slice(1));
     break;
   }
   case "publish": await publish(rest[0]); break;

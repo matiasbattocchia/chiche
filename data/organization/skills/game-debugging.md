@@ -1,12 +1,12 @@
 ---
 kind: skill
-description: Seeing a game work — game run's steps, eval, saved state and screenshots;
-  reading its report; the dev server; the ?debug, ?seed and ?fresh switches.
+description: Seeing a game work — game test's steps, eval, saved state and screenshots;
+  reading its report; the child's screen; the ?debug, ?seed and ?fresh switches.
 ---
 # Debugging games
 
-`game run <slug>` builds the game, opens it in headless Chromium, plays the steps you
-give it, and reports. Sound plays, as the child would hear it. The report comes in this
+`game test <slug>` builds the game into a private temporary folder (the child's `dist/`
+is untouched), opens it in headless Chromium, plays the steps you give it, and reports. Sound plays, as the child would hear it. The report comes in this
 order:
 
 - the renderer, fps and running scenes; the difficulty (level, success rate, tries)
@@ -24,7 +24,7 @@ order:
 `--keys` takes one space-separated string, run in order after the game boots:
 
 ```sh
-game run futbol --keys "Space wait:300 Right:800 shot Space" --for 2
+game test futbol --keys "Space wait:300 Right:800 shot Space" --for 2
 #   Space        tap          Right:800   hold 800 ms (Left/Right/Up/Down, Space, Enter, KeyA…)
 #   wait:300     pause        click:480,300   click at game coordinates (960×540)
 #   shot         screenshot now
@@ -37,7 +37,7 @@ game run futbol --keys "Space wait:300 Right:800 shot Space" --for 2
 Don't play through the title to reach level 5. Give the save you want:
 
 ```sh
-game run futbol --state '{"scene":"Play","data":{"level":5},"difficulty":{"level":0.8,"n":30,"recent":[]}}'
+game test futbol --state '{"scene":"Play","data":{"level":5},"difficulty":{"level":0.8,"n":30,"recent":[]}}'
 ```
 
 The boot scene's `next()` resumes into `scene`. `--eval "kit.save"` prints the current
@@ -46,18 +46,20 @@ save, a good starting point to copy from.
 ## Looking inside
 
 ```sh
-game run futbol --eval "game.scene.getScene('Play').state" --eval "kit.difficulty.rate"
-game run futbol --query "debug=1"      # physics bodies drawn + overlay (fps, scenes, level)
-game run futbol --query "seed=7"       # same random numbers every run
+game test futbol --eval "game.scene.getScene('Play').state" --eval "kit.difficulty.rate"
+game test futbol --query "debug=1"      # physics bodies drawn + overlay (fps, scenes, level)
+game test futbol --query "seed=7"       # same random numbers every run
 ```
 
 `?fresh=1` drops the save, for the child's browser too. `console.log` your own events
 (a goal, a pickup) rather than per-frame values: the report is for reading.
 
-## The dev server
+## The child's screen
 
-`game serve` (port 7357) serves every game at `/<slug>/`, rebuilds on every save under
-`games/` or `kit/`, and reloads only the pages of the games that changed. A failed build is
-printed to its log and never reloads anyone. The reloaded page resumes the scene and
-the save. Only syntax errors stop a build; type errors don't, so run
-`game check` before you save a change the child is going to see.
+`game serve` (port 7357) is chiche's: it serves every game's `dist/` at `/<slug>/` in a
+browser window of its own and restarts a game there when its `dist/` changes. It builds
+nothing. `game build <slug>` is the only thing that writes `dist/`, so it is the one step
+that puts a change in front of the child: the window navigates to the game and resumes
+the scene and the save. A failed build leaves the old `dist/` in place and the window
+alone. Only syntax errors stop a build; type errors don't, so run `game check` and
+`game test` before you build a change the child is going to see.

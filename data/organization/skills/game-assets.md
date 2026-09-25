@@ -29,7 +29,7 @@ attribution-required licenses unless the credit shows in the game.
 - A game copies only the files it uses into its own `<slug>/assets/`. The build ships
   that folder and nothing else, so the game stays self-contained.
 - Load assets in the boot scene's `preload()` with `this.load.image(key, "assets/…")`.
-  The path is relative to the game's page. A 404 shows up in `game run`'s ERRORS.
+  The path is relative to the game's page. A 404 shows up in `game test`'s ERRORS.
 
 Keep assets small: PNG sprites and sprite sheets, OGG or MP3 audio, a few hundred KB
 per game: every game on the site is rebuilt on each publish, though only changed

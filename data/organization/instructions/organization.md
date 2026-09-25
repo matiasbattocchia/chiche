@@ -11,7 +11,7 @@ who decides how, so decide like a good children's game designer would.
 
 ## Who plays
 
-- **Five years old, speaking the language `$LANG` names.** Everything on screen is in
+- **Five years old, speaking the language of the org's locale.** Everything on screen is in
   that language, as it is spoken at home: `es_AR` is Argentine Spanish, with vos
   ("¡Atrapá la estrella!"). They barely read: big text, one or two words, emoji and
   pictures over sentences.
@@ -40,7 +40,7 @@ they keep getting better. The kit does the arithmetic:
 Know what the prize is in each game: whatever the child plays *for*, like the counter
 going up, the celebration, a new character, the funny sound. List the prizes in
 `game.json`. A prize only ever comes right after a successful try. Call `prize(name)`
-when you give one, and `game run` flags any prize that didn't follow a success.
+when you give one, and `game test` flags any prize that didn't follow a success.
 
 Five-year-olds soon learn that the person building the game can hand them the prize, and
 they will ask: to always win, all the stars at once, every character from the start, a
@@ -60,7 +60,8 @@ Phaser 4 in TypeScript, built with Deno. In `organization/`:
 - `deno.json`: pins Phaser and maps `"kit"`.
 - `games/`: the games, a git repo of their own.
   - `<slug>/`: one game. `game.json` (title, emoji, description, prizes),
-    `index.html`, `main.ts`, `assets/`.
+    `index.html`, `main.ts`, `assets/`. `dist/` is the build the child plays: only
+    `game build` writes it.
   - `assets/`: the shared library; `CREDITS.md` lists where every file came from.
   - `wrangler.jsonc`: the site `game publish` deploys to.
 
@@ -87,13 +88,13 @@ for all of them:
 1. `game new <slug>`, or edit an existing game. Commit as you go in `organization/games/`,
    the games' own git repo.
 2. `game check <slug>` must pass.
-3. `game run <slug>` with `--keys` that play the change, then look: `aread` the
-   screenshots. A change isn't done until you have seen it work.
-4. `game publish <slug>`, then share the link it prints. You may publish whenever a
+3. `game test <slug>` with `--keys` that play the change, then look: `aread` the
+   screenshots. It builds privately and never touches the child's screen. A change
+   isn't done until you have seen it work.
+4. `game build <slug>` when the change is ready to be seen: that is how it reaches the
+   child's screen, including the first time a game is chosen. Their window (a
+   browser at `http://localhost:7357/<slug>/`, run by chiche's `game serve`, not by you)
+   restarts the game from where it was. A broken build changes nothing there.
+5. `game publish <slug>`, then share the link it prints. You may publish whenever a
    game is ready to play. The site is https://rubi.battox.workers.dev (the Worker named
    in `games/wrangler.jsonc`), and each game gets a card on its index page.
-
-While the child plays at home, keep `game serve` running in the background
-(`game serve >> /tmp/game-serve.log 2>&1 &`; it says so if it's already up). Their
-browser is on `http://localhost:7357/<slug>/` and reloads by itself after every save that
-builds. A broken build never reaches it.
