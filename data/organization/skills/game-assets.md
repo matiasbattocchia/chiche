@@ -34,9 +34,21 @@ a core set to start with, and packs imported to go beyond. `game assets` lists i
   assets import fluent <group or emoji>` adds more emoji (Objects, Symbols). `game assets
   import font <family>` adds a Google Fonts family.
 
-The library leaves out files whose names say nothing (`jingles_NES09`, `tile_0042`): nobody
-could choose them. `--opaque` imports them anyway; an image you can still judge by looking,
-a sound you can't.
+Packs are made for people who look, not for you: many files have names that say nothing
+(`tile_0042`, `jingles_NES09`), and even a good name says less than a look does. Naming by
+eye costs a minute every time, so each pack gets a `NAMES.md` in its folder
+(`assets/kenney-tiny-dungeon/NAMES.md`), written the first time you work out what its
+files are: one line per file or run of files (`tile_0042: barrel`, `tile_0060-0063: wooden
+floor, four variants`), and what you learned about the rest ("the characters face right").
+From then on it is a grep, not a look: read it before opening a contact sheet, and add to
+it when you look at something it doesn't cover.
+
+Phaser reads a sheet by itself: `this.load.spritesheet(key, url, { frameWidth: 16,
+frameHeight: 16, spacing: 1 })` slices it into numbered frames (`setFrame(42)`, or a
+`Tilemap` with `addTilesetImage`). The library keeps single sprites only, so a pack that
+comes as sheets alone (Kenney's Roguelike packs) you take by hand: `fetch` the zip, copy the
+sheet and its license into the game's `assets/`, and read the grid from the pack's own note
+(`tilesheetInfo.txt`: 16×16, 1 px margin).
 
 ## Choosing
 

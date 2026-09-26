@@ -7,12 +7,18 @@
   "system": {
     // a bash call's wall cap unless the model asks for another
     "bashTimeoutMs": 120000,
-    // est. tokens of raw event JSON (~1.8x the prompt) before a checkpoint runs
-    "compactAt": 50000,
+    // est. tokens of raw event JSON (~1.8x the prompt) before a checkpoint runs. The
+    // default (50000, a ~28K prompt) is tuned for a chatty agent: here a turn reads a whole
+    // game and a checkpoint costs ~20 s and forgets it, so the window is wider. Raised
+    // together with windowLimit, which caps what the window can weigh
+    "compactAt": 150000,
     // est. tokens a checkpoint leaves uncovered
     "keepRecent": 20000,
+    // est. tokens the running turn may weigh before a checkpoint cuts into it; under it, a
+    // checkpoint covers closed turns only
+    "compactTurnAt": 150000,
     // history query cap — the prompt's size guard
-    "windowLimit": 500,
+    "windowLimit": 1500,
     // how long a world message waits for the rest of its burst before a turn runs
     "debounceMs": 5000
   },
@@ -59,7 +65,11 @@
   "agents": {
     // <name>: any organization.agents key re-declared, plus identity — the principal's name (the agent goes by it) and the handles they are known by; null ⇒ not declared
     "matias": {
-      "model": "claude-opus-5-5",
+      // Gemini Flash at medium: a five-year-old is waiting; Opus took 3-6 s a step and 2.5k
+      // tokens of thinking to name tiles. Same GEMINI_API_KEY as the voice, from .env
+      "provider": "google",
+      "model": "gemini-3.8-flash",
+      "effort": "medium",
       "mind": true
     }
   },

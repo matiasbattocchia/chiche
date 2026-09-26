@@ -1,4 +1,19 @@
-import { burst, flash, glow, kit, next, onResize, Phaser, pop, prize, screen, sfx, squash, startGame } from "kit";
+import {
+  burst,
+  flash,
+  glow,
+  kit,
+  next,
+  onResize,
+  Phaser,
+  pop,
+  prize,
+  say,
+  screen,
+  sfx,
+  squash,
+  startGame,
+} from "kit";
 import meta from "./game.json" with { type: "json" };
 
 const W = 960, H = 540;
@@ -25,9 +40,18 @@ class Title extends Phaser.Scene {
   }
 
   create() {
-    this.add.text(W / 2, H / 2 - 60, `${meta.emoji} ${meta.title}`, big(64)).setOrigin(0.5);
-    const play = this.add.text(W / 2, H / 2 + 60, "▶ ¡Jugar!", big(48)).setOrigin(0.5);
-    this.tweens.add({ targets: play, scale: 1.1, yoyo: true, repeat: -1, duration: 500 });
+    this.add.text(W / 2, H / 2 - 60, `${meta.emoji} ${meta.title}`, big(64))
+      .setOrigin(0.5);
+    const play = this.add.text(W / 2, H / 2 + 60, "▶ ¡Jugar!", big(48))
+      .setOrigin(0.5);
+    this.tweens.add({
+      targets: play,
+      scale: 1.1,
+      yoyo: true,
+      repeat: -1,
+      duration: 500,
+    });
+    say(`${meta.title}. ${play.text}`); // the child can't read: what the screen says is said
     const go = () => {
       sfx(this, "click");
       this.scene.start("Play");
@@ -55,7 +79,9 @@ class Play extends Phaser.Scene {
   create() {
     this.keys = this.input.keyboard!.createCursorKeys();
     this.cameras.main.filters.internal.addVignette(0.5, 0.5, 0.9, 0.3);
-    this.basket = this.physics.add.image(W / 2, H - 40, "basket").setImmovable(true);
+    this.basket = this.physics.add.image(W / 2, H - 40, "basket").setImmovable(
+      true,
+    );
     this.basket.setCollideWorldBounds(true);
     this.stars = this.physics.add.group();
     this.counter = this.add.text(0, 0, "", big(40));
@@ -68,7 +94,10 @@ class Play extends Phaser.Scene {
       star.destroy();
       this.catch();
     });
-    this.input.on("pointermove", (p: Phaser.Input.Pointer) => this.basket.x = p.worldX);
+    this.input.on(
+      "pointermove",
+      (p: Phaser.Input.Pointer) => this.basket.x = p.worldX,
+    );
     this.drop();
   }
 
@@ -76,7 +105,11 @@ class Play extends Phaser.Scene {
   drop() {
     const d = kit.difficulty;
     const x = Phaser.Math.Between(60, W - 60);
-    const star = this.stars.create(x, -30, "star") as Phaser.Physics.Arcade.Image;
+    const star = this.stars.create(
+      x,
+      -30,
+      "star",
+    ) as Phaser.Physics.Arcade.Image;
     star.setVelocityY(d.pick(140, 420)).setAngularVelocity(90);
     pop(star);
     glow(star, 0xfff3b0);
@@ -108,22 +141,33 @@ class Play extends Phaser.Scene {
   fireworks() {
     prize("fireworks");
     sfx(this, "win");
+    say("¡Genial!", { interrupt: true });
     flash(this, 0xfff3b0);
     burst(this, W / 2, H / 2, { texture: "star", count: 40, speed: 400 });
   }
 
   override update() {
     const pad = this.input.gamepad?.pad1;
-    const dx = (this.keys.left.isDown || pad?.left ? -1 : 0) + (this.keys.right.isDown || pad?.right ? 1 : 0);
+    const dx = (this.keys.left.isDown || pad?.left ? -1 : 0) +
+      (this.keys.right.isDown || pad?.right ? 1 : 0);
     this.basket.setVelocityX(dx * 600);
-    for (const star of this.stars.getChildren() as Phaser.Physics.Arcade.Image[]) {
+    for (
+      const star of this.stars.getChildren() as Phaser.Physics.Arcade.Image[]
+    ) {
       if (star.y > screen().bottom + 30) this.miss(star);
     }
   }
 }
 
 function big(size: number): Phaser.Types.GameObjects.Text.TextStyle {
-  return { fontFamily: "system-ui, sans-serif", fontSize: `${size}px`, fontStyle: "bold", color: "#fff", stroke: "#000", strokeThickness: 6 };
+  return {
+    fontFamily: "system-ui, sans-serif",
+    fontSize: `${size}px`,
+    fontStyle: "bold",
+    color: "#fff",
+    stroke: "#000",
+    strokeThickness: 6,
+  };
 }
 
 function starPoints(outer: number, inner: number, n: number) {

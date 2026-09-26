@@ -6,14 +6,16 @@
 // stop` and wait for it, stop game serve, close the logs. `--no-liquen` skips liquen, the door
 // and game serve: the voice alone, to test the audio; `input` calls get an error. `--say-hi`
 // has the voice take the first turn. `--vad` leaves the turns to the server's activity
-// detection: the gate still decides what is sent, and closing it sends silence.
+// detection: the gate still decides what is sent, and closing it sends silence. `--fresh`
+// starts a new voice session instead of resuming the last run's.
 
+import { encodeHex } from "@std/encoding/hex";
 import { dirname, fromFileUrl, join } from "@std/path";
 import { TextLineStream } from "@std/streams";
 import { Audio, type Device, type Mixer, mixer, unmute, VOICE_RATE, watchMixer } from "./audio.ts";
-import { Scheduling, Voice } from "./gemini.ts";
+import { MODEL, Scheduling, Voice } from "./gemini.ts";
 import { keyCode, keyName, Keys } from "./keys.ts";
-import { clip, Door, errorOf, isReply, thinkingOf, toolUseOf } from "./liquen.ts";
+import { clip, Door, errorOf, isReply, isSaying, textOf, toolUseOf } from "./liquen.ts";
 import { Log } from "./log.ts";
 import { BOLD, DIM, GREEN, Meter, RED, RESET, Terminal, YELLOW } from "./term.ts";
 
@@ -90,13 +92,15 @@ if (!apiKey) {
   term.error("GEMINI_API_KEY is not set (it goes in .env)");
   Deno.exit(1);
 }
-const FLAGS = ["--no-liquen", "--say-hi", "--vad"];
+const FLAGS = ["--no-liquen", "--say-hi", "--vad", "--fresh"];
 /** --no-liquen: the voice alone, to test the audio. No builder, no game window. */
 const noLiquen = Deno.args.includes("--no-liquen");
 /** --say-hi: the voice takes the first turn. */
 const sayHi = Deno.args.includes("--say-hi");
 /** --vad: the server's activity detection takes the turns, no activityStart/End. */
 const vad = Deno.args.includes("--vad");
+/** --fresh: a new voice session, not the last run's resumed. */
+const fresh = Deno.args.includes("--fresh");
 const unknown = Deno.args.filter((a) => !FLAGS.includes(a));
 if (unknown.length) {
   term.error(`unknown argument ${unknown.join(" ")} (the ones there are: ${FLAGS.join(" ")})`);
@@ -121,6 +125,58 @@ const instructions = (await Deno.readTextFile(join(ROOT, "INSTRUCTIONS.md"))).re
   language,
 );
 
+// ── the voice's session, across runs ────────────────────────────────────────
+
+/**
+ * The voice's session outlives a run: its latest handle is kept here, and the next run resumes
+ * it, remembering what was said. Google's session docs: "Resumption tokens are valid for 2 hr
+ * after the last sessions termination". A resumed session keeps the system instruction it
+ * started with (measured, see gemini.ts), so a changed INSTRUCTIONS.md, language, model or
+ * --vad starts a new one, and so does --fresh.
+ */
+const SESSION = join(ROOT, "log", "session.json");
+/** The 2 hours, less a margin for the clocks. */
+const RESUME_MS = 115 * 60 * 1000;
+interface SavedSession {
+  handle: string;
+  /** When the session was last seen: the latest handle, or the run's end. */
+  savedAt: number;
+  /** What a resumed session can't change: see above. */
+  key: string;
+}
+const sessionKey = encodeHex(
+  await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(JSON.stringify({ instructions, language, vad, model: MODEL })),
+  ),
+);
+
+/** The last run's session, when it can be resumed; else why not. */
+async function lastSession(): Promise<{ handle: string; ago: number } | { why: string }> {
+  if (fresh) return { why: "--fresh" };
+  let s: SavedSession;
+  try {
+    s = JSON.parse(await Deno.readTextFile(SESSION));
+  } catch {
+    return { why: "no earlier session" };
+  }
+  const ago = Date.now() - s.savedAt;
+  if (s.key !== sessionKey) return { why: "INSTRUCTIONS.md, the language or --vad changed" };
+  if (ago > RESUME_MS) return { why: `the last one ended ${Math.round(ago / 60_000)} min ago` };
+  return { handle: s.handle, ago };
+}
+
+let lastHandle: string | undefined;
+function saveSession() {
+  if (!lastHandle) return;
+  const s: SavedSession = { handle: lastHandle, savedAt: Date.now(), key: sessionKey };
+  try {
+    Deno.writeTextFileSync(SESSION, JSON.stringify(s) + "\n");
+  } catch (e) {
+    log.line("session", `not saved: ${(e as Error).message}`);
+  }
+}
+
 /** What is up, in boot order; teardown may run before any of it exists. */
 const up: {
   liquen?: Deno.ChildProcess;
@@ -143,6 +199,7 @@ async function teardown(code = 0) {
   term.end();
   term.dim("bye");
   up.keys?.stop();
+  await endSession();
   up.voice?.close();
   up.mixer?.stop();
   up.audio?.stop();
@@ -210,18 +267,28 @@ if (noLiquen) {
 
 // ── the input tool, wired to the door ───────────────────────────────────────
 
-/** An open `input` call: its Gemini id, and the door message id once `message` replied. */
-interface Call {
-  id: string;
-  messageId?: string;
-  sentAt?: number;
-}
-const calls: Call[] = [];
-/** The builder's latest note (its thinking, else its latest tool use), for the updates. */
-let lastNote = "";
 /**
- * While an `input` call is open and nobody has spoken for this long, the latest note goes as a
- * WHEN_IDLE answer, so the voice tells the child how it's going. Notes otherwise go SILENT.
+ * The channel to the voice: the newest `input` call, acknowledged at once and kept open.
+ * Nothing maps what the builder sends to the call that caused it: the voice sends what it
+ * likes, the builder answers when it likes, and every line goes through the newest call. An
+ * older call closes, silently, when a newer one arrives (a function response needs a call id:
+ * that is all the call is for).
+ */
+let channel: string | undefined;
+/**
+ * The builder as the door shows it: idle, or busy and either thinking (the model generates:
+ * deltas arrive) or working (its tools run: from a step's first tool use to the next delta).
+ * The voice is told each change of state, and no more: not the thinking, not the commands
+ * (log/2026-09-26T03-24-21: the voice sent the builder's own thinking back as new tasks).
+ */
+let state: "idle" | "thinking" | "working" = "idle";
+/** When the builder went busy, for the updates. */
+let busySince: number | undefined;
+/** Whether the builder said something final since it went busy: a result, or an error. */
+let concluded = false;
+/**
+ * While the builder is busy and nobody has spoken for this long, an update goes as a
+ * WHEN_IDLE answer, so the voice tells the child that both of them are still there.
  */
 const UPDATE_QUIET_MS = 30_000;
 /** Last time anyone spoke: the mic opening or closing, the voice's audio, a turn completing. */
@@ -229,24 +296,25 @@ let lastTalk = performance.now();
 
 /** Answer scheduling that makes the voice speak unless it already has in this answer. */
 const unlessSpoken = () => received > 0 ? Scheduling.SILENT : Scheduling.WHEN_IDLE;
-const newest = () => calls.at(-1);
-const closeCall = (c: Call) => {
-  const i = calls.indexOf(c);
-  if (i >= 0) calls.splice(i, 1);
-};
 
-/** An answer to the newest open call, or dropped (work typed in the REPL, say). */
+/** A line to the voice through the channel, or dropped (work typed in the REPL, say). */
 function forward(what: string, output: string, scheduling: Scheduling, willContinue = true) {
-  const c = newest();
-  if (!c) {
+  if (!channel) {
     term.dim(`(no input call open) ${what}: ${clip(output, 80)}`);
     return;
   }
   term.dim(`${what}: ${clip(output.replaceAll("\n", " "), 100)}`);
-  if (!up.voice?.answer({ id: c.id, output, scheduling, willContinue })) {
+  if (!up.voice?.answer({ id: channel, output, scheduling, willContinue })) {
     term.dim("(disconnected; the answer was lost)");
   }
-  if (!willContinue) closeCall(c);
+  if (!willContinue) channel = undefined;
+}
+
+/** The builder changed state; the voice hears of it once, silently. */
+function become(next: typeof state) {
+  if (state === next) return;
+  state = next;
+  if (next !== "idle") forward(next, next, Scheduling.SILENT);
 }
 
 if (!noLiquen) {
@@ -255,100 +323,95 @@ if (!noLiquen) {
   up.door = await Door.connect(DATA, user, join(DATA, "organization"), {
     trace: (d, m) => log.door(d, m),
     event(e) {
-      const thinking = thinkingOf(e);
-      if (thinking) {
-        lastNote = thinking;
-        return forward("note", `thinking: ${thinking}`, Scheduling.SILENT);
-      }
-      const use = toolUseOf(e);
-      if (use) {
-        lastNote ||= `${use.name} ${use.input}`;
-        return forward("progress", `working: ${use.name} ${use.input}`, Scheduling.SILENT);
+      if (toolUseOf(e)) return become("working");
+      if (up.door && isSaying(e, up.door.address)) {
+        return forward("note", `note: ${textOf(e)}`, Scheduling.SILENT);
       }
       if (up.door && isReply(e, up.door.address)) {
-        const text = (e.parts ?? []).filter((p) => p.type !== "data").map((p) => p.text).join(" ");
-        return forward("result", text, Scheduling.WHEN_IDLE);
+        concluded = true;
+        return forward(
+          "result",
+          `result (the builder is idle now, waiting for you): ${textOf(e)}`,
+          Scheduling.WHEN_IDLE,
+        );
       }
       const error = errorOf(e);
-      if (error) return forward("error", `error: ${error}`, Scheduling.WHEN_IDLE);
+      if (error) {
+        concluded = true;
+        return forward("error", `error (the builder stopped): ${error}`, Scheduling.WHEN_IDLE);
+      }
     },
     delta(d) {
-      if (d.kind === "error" && d.text) forward("error", `error: ${d.text}`, Scheduling.WHEN_IDLE);
-      // thinking and text deltas are dropped: the reply arrives as an event
+      if (d.kind === "error" && d.text) {
+        concluded = true;
+        return forward("error", `error (the builder stopped): ${d.text}`, Scheduling.WHEN_IDLE);
+      }
+      if (d.kind === "thinking" || d.kind === "text") become("thinking");
     },
+    // the door's turn edges; a turn that ended with no result and no error (a silence) is
+    // told as one, or the voice goes on telling the child that work is under way
     status(s) {
-      if (s.status !== "idle" || s.after === undefined) return;
-      for (const c of [...calls]) {
-        if (c.messageId !== undefined && c.messageId <= s.after) {
-          term.dim(`finished (${c.messageId.slice(-6)})`);
-          up.voice?.answer({
-            id: c.id,
-            output: "",
-            scheduling: Scheduling.SILENT,
-            willContinue: false,
-          });
-          closeCall(c);
-        }
+      if (s.status === "busy") {
+        busySince ??= performance.now();
+        concluded = false;
+        return;
+      }
+      busySince = undefined;
+      const quiet = state !== "idle" && !concluded;
+      become("idle");
+      if (quiet) {
+        forward("idle", "idle: the builder stopped with nothing to say", Scheduling.WHEN_IDLE);
       }
     },
     hangup(expected) {
       if (expected || tearingDown) return;
       term.error("the door hung up");
-      for (const c of calls.splice(0)) {
-        up.voice?.answer({
-          id: c.id,
-          output: "error: the builder went away",
-          scheduling: Scheduling.WHEN_IDLE,
-          willContinue: false,
-        });
-      }
+      forward("error", "error: the builder went away", Scheduling.WHEN_IDLE, false);
     },
   });
 }
 
 async function input(callId: string, text: string) {
-  const c: Call = { id: callId };
-  calls.push(c);
+  // the newer call is the channel from here on; the older one is left open, with nothing
+  // more to carry (whether the model minds a call never closed is not measured yet)
+  channel = callId;
   term.dim(`input: ${clip(text.replaceAll("\n", " "), 120)}`);
   const r = up.door
     ? await up.door.message(text)
     : { ok: false, id: undefined, error: "the builder is off (chiche runs with --no-liquen)" };
-  if (!calls.includes(c)) return; // cancelled meanwhile
+  if (channel !== callId) return; // cancelled or superseded meanwhile
   // once the voice has spoken this turn, WHEN_IDLE would have it speak again once it's idle
   // (measured: a second answer 0.44 s after the first ended); before it has, WHEN_IDLE is what
   // makes it speak at all (measured: a turn that was only the call, and the user's run
   // log/2026-09-25T17-45-59, where a SILENT "sent" left the child with nothing)
   if (r.ok && typeof r.id === "string") {
-    c.messageId = r.id;
-    c.sentAt = performance.now();
-    lastNote = "";
     term.dim(`sent (${r.id.slice(-6)})`);
-    up.voice?.answer({ id: c.id, output: "sent", scheduling: unlessSpoken(), willContinue: true });
+    up.voice?.answer({
+      id: callId,
+      output: "sent",
+      scheduling: unlessSpoken(),
+      willContinue: true,
+    });
   } else {
     term.dim(`not sent: ${r.error}`);
-    up.voice?.answer({
-      id: c.id,
-      output: `error: ${r.error ?? "not sent"}`,
-      scheduling: unlessSpoken(),
-      willContinue: false,
-    });
-    closeCall(c);
+    forward("error", `error: ${r.error ?? "not sent"}`, unlessSpoken(), false);
   }
 }
 
-/** An update on the open work, when nobody has spoken for a while (see UPDATE_QUIET_MS). */
+/** An update while the builder is busy, when nobody has spoken for a while (UPDATE_QUIET_MS). */
 function update() {
-  const c = newest();
   const now = performance.now();
   if (
-    !c?.sentAt || open || closing || answering || waitingSince !== undefined ||
-    up.audio?.playing || now - lastTalk < UPDATE_QUIET_MS
+    busySince === undefined || !channel || open || closing || answering ||
+    waitingSince !== undefined || up.audio?.playing || now - lastTalk < UPDATE_QUIET_MS
   ) return;
   lastTalk = now; // the next one after another quiet stretch, whether the voice speaks or not
-  const s = Math.round((now - c.sentAt) / 1000);
+  const s = Math.round((now - busySince) / 1000);
   forward(
     "update",
-    `update: still working, ${s} s in.${lastNote ? ` Latest: ${lastNote}` : ""}`,
+    // "no result yet": run log/2026-09-26T11-40-42 had the voice announce the publish done
+    // on an update, 40 s before the result came
+    `update: still ${state === "idle" ? "busy" : state}, ${s} s in, no result yet: nothing is done`,
     Scheduling.WHEN_IDLE,
   );
 }
@@ -586,19 +649,69 @@ term.pin(2);
 up.status = setInterval(status, STATUS_MS);
 up.updates = setInterval(update, 1000);
 
+/**
+ * The run ends, and the session will be resumed: the work still open is answered as stopped
+ * (liquen stops with chiche), so the next run's voice isn't left waiting on it, and the handle
+ * saved is one taken after that answer, when the server sends one in time.
+ */
+async function endSession() {
+  const v = up.voice;
+  if (!v?.connected) return saveSession();
+  if (channel) {
+    forward(
+      "stopped",
+      "stopped: chiche was closed; if the builder was working, ask again next time",
+      Scheduling.SILENT,
+      false,
+    );
+    const came = await v.nextHandle(3000);
+    log.line(
+      "session",
+      `the open call answered as stopped; ${
+        came ? "a handle came after" : "no handle after, in 3 s"
+      }`,
+    );
+  }
+  saveSession();
+}
+
 // 5. Gemini
+const last = await lastSession();
+/** The voice picked up the last run's session. */
+let resumed = false;
+if ("why" in last) log.line("session", `new: ${last.why}`);
+else log.line("session", `resuming the one seen ${Math.round(last.ago / 1000)} s ago`);
 up.voice = await Voice.start({
   apiKey,
   language,
   systemInstruction: instructions,
   vad,
+  resume: "handle" in last ? last.handle : undefined,
   on: {
     trace: (d, m) => log.gemini(d, m),
-    connected(resumed) {
+    connected(how) {
       link = "live";
-      term.dim(resumed ? "gemini reconnected" : `gemini connected (${language})`);
+      if (how === "resumed") resumed = true;
+      const minutes = "ago" in last ? Math.max(1, Math.round(last.ago / 60_000)) : 0;
+      term.dim(
+        {
+          new: `gemini connected (${language})${
+            "why" in last ? `: a new session, ${last.why}` : ""
+          }`,
+          resumed: `gemini resumed the last session, from ${minutes} min ago (--fresh: a new one)`,
+          reconnected: "gemini reconnected",
+        }[how],
+      );
       // a new connection knows no activity: if the mic is open, the turn is on
-      if (resumed && open) up.voice?.activityStart();
+      if (how === "reconnected" && open) up.voice?.activityStart();
+    },
+    resumeRefused(reason) {
+      term.dim(`the last session can't be resumed (${reason}); starting a new one`);
+      log.line("session", `refused: ${reason}`);
+    },
+    handle(h) {
+      lastHandle = h;
+      saveSession();
     },
     goAway(timeLeft) {
       term.dim(`gemini GoAway${timeLeft ? ` (${timeLeft})` : ""}`);
@@ -666,14 +779,18 @@ up.voice = await Voice.start({
       void input(call.id, call.args.text);
     },
     toolCallCancelled(ids) {
-      for (const c of [...calls]) if (ids.includes(c.id)) closeCall(c);
+      if (channel && ids.includes(channel)) channel = undefined;
       term.dim(`input cancelled (${ids.length})`);
     },
   },
 });
 // an open activity would hold the answer until it ends: the kick goes only while the mic is closed
 if (sayHi && !open) {
-  up.voice.sendText("(The session just started: take the first turn.)");
+  up.voice.sendText(
+    resumed
+      ? "(The session resumed after a break: take the first turn.)"
+      : "(The session just started: take the first turn.)",
+  );
   waitingSince = performance.now();
 }
 if (open) up.voice.activityStart(); // opened before the session existed

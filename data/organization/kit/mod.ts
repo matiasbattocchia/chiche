@@ -31,7 +31,10 @@ export type Save = {
 };
 
 function load(key: string): Save {
-  const empty: Save = { data: {}, difficulty: { level: 0.3, n: 0, recent: [] } };
+  const empty: Save = {
+    data: {},
+    difficulty: { level: 0.3, n: 0, recent: [] },
+  };
   try {
     if (params.has("fresh")) localStorage.removeItem(key);
     const saved = JSON.parse(localStorage.getItem(key) ?? "null");
@@ -101,35 +104,59 @@ export function prize(name: string) {
 
 // ── sound ───────────────────────────────────────────────────────────────────
 
-type Tone = { wave: OscillatorType; from: number; to: number; ms: number; gain?: number };
+type Tone = {
+  wave: OscillatorType;
+  from: number;
+  to: number;
+  ms: number;
+  gain?: number;
+};
 const PRESETS: Record<string, Tone[]> = {
   click: [{ wave: "square", from: 660, to: 660, ms: 40, gain: 0.15 }],
   jump: [{ wave: "square", from: 300, to: 700, ms: 150 }],
-  coin: [{ wave: "square", from: 990, to: 990, ms: 70 }, { wave: "square", from: 1320, to: 1320, ms: 160 }],
+  coin: [{ wave: "square", from: 990, to: 990, ms: 70 }, {
+    wave: "square",
+    from: 1320,
+    to: 1320,
+    ms: 160,
+  }],
   kick: [{ wave: "triangle", from: 180, to: 50, ms: 120, gain: 0.5 }],
   hit: [{ wave: "sawtooth", from: 220, to: 80, ms: 180 }],
   miss: [{ wave: "triangle", from: 400, to: 200, ms: 250 }],
   laser: [{ wave: "square", from: 1400, to: 350, ms: 110, gain: 0.12 }],
-  win: [523, 659, 784, 1047].map((f) => ({ wave: "square" as const, from: f, to: f, ms: 110 })),
+  win: [523, 659, 784, 1047].map((f) => ({
+    wave: "square" as const,
+    from: f,
+    to: f,
+    ms: 110,
+  })),
 };
 
 // Retro sounds made by jsfxr (public domain), each generated once from the jsfxr generator
 // it is named after and pinned here, so a game always sounds the same. `makeSound` adds a
 // game's own.
 const RETRO: Record<string, string> = {
-  pickup: "34T6PkyRDVe6wn3crXSkvRP58zuygRN6q9wv2Crh2bG1CetMB1w9E3fn7ZmMsRe47jWigyFnqfxM1zq5XpZE2WLkQaHHrHBGGhyNRJ1ZrrFD83NCQZFRmoA2K",
-  zap: "57uBnWhFGX99q4XEM56Lrr6srNWtiwWMNreuoGm1tST56PXA3cSG4E8qBmkhurnPvFuTVFU2JvhAVo4WRNkiryYft2ZZ8wH6ZRZpE74acAEUpt4NNRG9jZFxs",
-  explosion: "7BMHBGPaUa2U4LWYV5XX7pbPgQxqPkeGhc7XwnUYn6tD5h6jtTdp7gaQeCWS5YZmnFTADYGowF6Ad9Nk6x6J47DYDDA729iZby7XQ6zSdd8xnPhNSYhb9kNPR",
-  powerup: "34T6Pkig4V7WYfizsNPxriJ3BBcGTNJSrQ4fYRYiQzEmyHR3cDkJPnjEmxsRbWhe7VfSGTCFNzBb7RDZ4QpMBz5uqunZVkxoCSsvjHQcumyTR619jZNiKwRhZ",
-  hurt: "11111HABDo7hw6oKCMBr1MVdmDiD4g3tYFUNGmtqoS2DzbAJpjMT4qVhtBscsK2DffpXgaDRJm7CLE4sd1Qe4pxfkX3aPQQcLY1f74hjvUiCq577BU2e8fgB",
-  blip: "11111Eri68hfHrjD1FwVtwiTs5aVogxoT4mek4vBMzgKSuzx6RgyXi7XUvrRewdXVxmYn2UHELp6beDU9qqgLHroFptVs7a1wjxFtBraGizVAoBSXv3AqQUP",
+  pickup:
+    "34T6PkyRDVe6wn3crXSkvRP58zuygRN6q9wv2Crh2bG1CetMB1w9E3fn7ZmMsRe47jWigyFnqfxM1zq5XpZE2WLkQaHHrHBGGhyNRJ1ZrrFD83NCQZFRmoA2K",
+  zap:
+    "57uBnWhFGX99q4XEM56Lrr6srNWtiwWMNreuoGm1tST56PXA3cSG4E8qBmkhurnPvFuTVFU2JvhAVo4WRNkiryYft2ZZ8wH6ZRZpE74acAEUpt4NNRG9jZFxs",
+  explosion:
+    "7BMHBGPaUa2U4LWYV5XX7pbPgQxqPkeGhc7XwnUYn6tD5h6jtTdp7gaQeCWS5YZmnFTADYGowF6Ad9Nk6x6J47DYDDA729iZby7XQ6zSdd8xnPhNSYhb9kNPR",
+  powerup:
+    "34T6Pkig4V7WYfizsNPxriJ3BBcGTNJSrQ4fYRYiQzEmyHR3cDkJPnjEmxsRbWhe7VfSGTCFNzBb7RDZ4QpMBz5uqunZVkxoCSsvjHQcumyTR619jZNiKwRhZ",
+  hurt:
+    "11111HABDo7hw6oKCMBr1MVdmDiD4g3tYFUNGmtqoS2DzbAJpjMT4qVhtBscsK2DffpXgaDRJm7CLE4sd1Qe4pxfkX3aPQQcLY1f74hjvUiCq577BU2e8fgB",
+  blip:
+    "11111Eri68hfHrjD1FwVtwiTs5aVogxoT4mek4vBMzgKSuzx6RgyXi7XUvrRewdXVxmYn2UHELp6beDU9qqgLHroFptVs7a1wjxFtBraGizVAoBSXv3AqQUP",
 };
 // jsfxr's sounds peak anywhere from 0.3 to 0.9; each is scaled to this, near the tones' 0.2
 const RETRO_PEAK = 0.3;
 const rendered = new Map<string, { buffer: AudioBuffer; gain: number }>();
 
 /** jsfxr settings (the `game-sound` skill says what each does); unset ones keep jsfxr's defaults. */
-export type SoundSettings = { wave_type?: 0 | 1 | 2 | 3 } & { [setting: `p_${string}`]: number };
+export type SoundSettings = { wave_type?: 0 | 1 | 2 | 3 } & {
+  [setting: `p_${string}`]: number;
+};
 
 /**
  * A game's own sound, played with `sfx(scene, name)` like the built-in ones. Make it once,
@@ -148,7 +175,11 @@ export function makeSound(name: string, settings: SoundSettings) {
  * sounds vary their pitch a little on each play, so a repeated sound doesn't grate. Every
  * play is logged.
  */
-export function sfx(scene: Phaser.Scene, name: string, config?: Phaser.Types.Sound.SoundConfig) {
+export function sfx(
+  scene: Phaser.Scene,
+  name: string,
+  config?: Phaser.Types.Sound.SoundConfig,
+) {
   console.log(`[sfx] ${name}`);
   if (scene.cache.audio.exists(name)) {
     scene.sound.play(name, config);
@@ -156,7 +187,9 @@ export function sfx(scene: Phaser.Scene, name: string, config?: Phaser.Types.Sou
   }
   const tones = PRESETS[name];
   const ctx = (scene.sound as Phaser.Sound.WebAudioSoundManager).context;
-  if (!tones && !RETRO[name]) return console.warn(`[sfx] no sound called ${name}`);
+  if (!tones && !RETRO[name]) {
+    return console.warn(`[sfx] no sound called ${name}`);
+  }
   if (!ctx) return;
   // Math.random, not Phaser's RND: sound must not shift a seeded game's randomness
   const pitch = 1 + (Math.random() - 0.5) * 0.1;
@@ -164,9 +197,17 @@ export function sfx(scene: Phaser.Scene, name: string, config?: Phaser.Types.Sou
     let sound = rendered.get(name);
     if (!sound) {
       // the code holds the sound's shape; volume and rate are sfxr.generate()'s defaults
-      const params = { ...sfxr.b58decode(RETRO[name]), sound_vol: 0.25, sample_rate: 44100, sample_size: 8 };
+      const params = {
+        ...sfxr.b58decode(RETRO[name]),
+        sound_vol: 0.25,
+        sample_rate: 44100,
+        sample_size: 8,
+      };
       const buffer = sfxr.toWebAudio(params, ctx).buffer as AudioBuffer;
-      const peak = buffer.getChannelData(0).reduce((top, v) => Math.max(top, Math.abs(v)), 0);
+      const peak = buffer.getChannelData(0).reduce(
+        (top, v) => Math.max(top, Math.abs(v)),
+        0,
+      );
       sound = { buffer, gain: peak ? RETRO_PEAK / peak : 0 };
       rendered.set(name, sound);
     }
@@ -185,7 +226,10 @@ export function sfx(scene: Phaser.Scene, name: string, config?: Phaser.Types.Sou
     const gain = ctx.createGain();
     osc.type = tone.wave;
     osc.frequency.setValueAtTime(tone.from * pitch, t);
-    osc.frequency.exponentialRampToValueAtTime(tone.to * pitch, t + tone.ms / 1000);
+    osc.frequency.exponentialRampToValueAtTime(
+      tone.to * pitch,
+      t + tone.ms / 1000,
+    );
     gain.gain.setValueAtTime((tone.gain ?? 0.2) * scene.sound.volume, t);
     gain.gain.exponentialRampToValueAtTime(0.001, t + tone.ms / 1000);
     osc.connect(gain).connect(ctx.destination);
@@ -195,18 +239,95 @@ export function sfx(scene: Phaser.Scene, name: string, config?: Phaser.Types.Sou
   }
 }
 
+// ── speech ──────────────────────────────────────────────────────────────────
+// The child can't read: every word on screen is also said, by the browser's own voice
+// (Web Speech API), in the page's language (`<html lang>`; the template says the org's).
+
+const speech = globalThis.speechSynthesis as SpeechSynthesis | undefined;
+const lang = () =>
+  (document.documentElement.lang || navigator.language).replaceAll("_", "-");
+let held: string | undefined; // what was said before the first tap, to say then
+// Chrome and Safari refuse to speak before the page has been tapped or typed in
+const activated = () =>
+  (navigator as { userActivation?: { hasBeenActive: boolean } }).userActivation
+    ?.hasBeenActive ??
+    true;
+
+/** The installed voice for the page's language: its region first, then any of the language. */
+function voice() {
+  const want = lang().toLowerCase(), base = want.split("-")[0];
+  const voices = speech?.getVoices().map((v) => ({
+    v,
+    l: v.lang.replaceAll("_", "-").toLowerCase(),
+  })) ?? [];
+  return voices.find((x) => x.l === want)?.v ??
+    voices.find((x) => x.l.split("-")[0] === base)?.v;
+}
+
+/**
+ * Say a text out loud, the way a grown-up would read the screen to the child: the title,
+ * a button, "¡Genial!". Emoji and symbols are left out (`▶ ¡Jugar!` says "¡Jugar!"). Texts
+ * queue in order; `interrupt` drops what is pending and speaking first. Before the child's
+ * first tap the browser won't speak, so the last text is kept and said at the tap. Every
+ * say is logged; where no voice speaks the language, the text is said in the browser's
+ * default, and where there is no speech at all (`game test`) it is logged only.
+ */
+export function say(text: string, o: { interrupt?: boolean } = {}) {
+  const words = text.replaceAll(/[\p{Extended_Pictographic}\p{So}️‍]/gu, "")
+    .replaceAll(/\s+/g, " ").trim();
+  if (!words) return;
+  console.log(`[say] ${words}`);
+  if (!speech) return;
+  if (!activated()) {
+    if (held === undefined) {
+      for (const ev of ["pointerdown", "keydown"]) {
+        addEventListener(ev, speakHeld, { once: true, capture: true });
+      }
+    }
+    held = words;
+    return;
+  }
+  held = undefined;
+  if (o.interrupt) speech.cancel();
+  speak(words);
+}
+
+function speakHeld() {
+  if (held) speak(held);
+  held = undefined;
+}
+
+function speak(words: string) {
+  const u = new SpeechSynthesisUtterance(words);
+  u.lang = lang();
+  const v = voice();
+  if (v) u.voice = v;
+  speech!.speak(u);
+}
+
 // ── juice ───────────────────────────────────────────────────────────────────
 // Small effects that make a game feel alive, one call each. The `game-juice` skill says
 // when to use which.
 
-type Thing = Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Transform;
-const squashing = new WeakMap<Thing, { tween: Phaser.Tweens.Tween; x: number; y: number }>();
+type Thing =
+  & Phaser.GameObjects.GameObject
+  & Phaser.GameObjects.Components.Transform;
+const squashing = new WeakMap<
+  Thing,
+  { tween: Phaser.Tweens.Tween; x: number; y: number }
+>();
 
 /** Appear with a little overshoot, from nothing to its current scale. */
 export function pop(target: Thing, ms = 300) {
   const { scaleX, scaleY } = target;
   target.setScale(0);
-  return target.scene.tweens.add({ targets: target, scaleX, scaleY, duration: ms, ease: "Back.easeOut" });
+  return target.scene.tweens.add({
+    targets: target,
+    scaleX,
+    scaleY,
+    duration: ms,
+    ease: "Back.easeOut",
+  });
 }
 
 /** Squashed flat for an instant, then springs back: a landing, a bump, a press. */
@@ -218,7 +339,13 @@ export function squash(target: Thing, amount = 0.25, ms = 180) {
   }
   const { scaleX: x, scaleY: y } = target;
   target.setScale(x * (1 + amount), y * (1 - amount));
-  const tween = target.scene.tweens.add({ targets: target, scaleX: x, scaleY: y, duration: ms, ease: "Back.easeOut" });
+  const tween = target.scene.tweens.add({
+    targets: target,
+    scaleX: x,
+    scaleY: y,
+    duration: ms,
+    ease: "Back.easeOut",
+  });
   squashing.set(target, { tween, x, y });
   return tween;
 }
@@ -274,7 +401,10 @@ export function hitStop(scene: Phaser.Scene, ms = 60) {
 
 /** A soft glow around something to catch or to reach. */
 export function glow(
-  target: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite | Phaser.GameObjects.Text,
+  target:
+    | Phaser.GameObjects.Image
+    | Phaser.GameObjects.Sprite
+    | Phaser.GameObjects.Text,
   color = 0xffffff,
   strength = 4,
 ) {
@@ -297,7 +427,9 @@ const density = () => Math.min(devicePixelRatio || 1, 2);
 
 /** Canvas pixels per game unit. */
 function zoom() {
-  return scaler ? Math.min(scaler.width / design.width, scaler.height / design.height) : 1;
+  return scaler
+    ? Math.min(scaler.width / design.width, scaler.height / design.height)
+    : 1;
 }
 
 /**
@@ -308,25 +440,40 @@ function zoom() {
  */
 export function screen() {
   const z = zoom();
-  const w = (scaler?.width ?? design.width) / z, h = (scaler?.height ?? design.height) / z;
-  return new Phaser.Geom.Rectangle((design.width - w) / 2, (design.height - h) / 2, w, h);
+  const w = (scaler?.width ?? design.width) / z,
+    h = (scaler?.height ?? design.height) / z;
+  return new Phaser.Geom.Rectangle(
+    (design.width - w) / 2,
+    (design.height - h) / 2,
+    w,
+    h,
+  );
 }
 
 /**
  * `place(screen())` now and again whenever the screen changes shape (a tablet turned, a
  * window resized), for as long as the scene runs.
  */
-export function onResize(scene: Phaser.Scene, place: (screen: Phaser.Geom.Rectangle) => void) {
+export function onResize(
+  scene: Phaser.Scene,
+  place: (screen: Phaser.Geom.Rectangle) => void,
+) {
   const again = () => place(screen());
   again();
   scene.scale.on(Phaser.Scale.Events.RESIZE, again);
-  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => scene.scale.off(Phaser.Scale.Events.RESIZE, again));
+  scene.events.once(
+    Phaser.Scenes.Events.SHUTDOWN,
+    () => scene.scale.off(Phaser.Scale.Events.RESIZE, again),
+  );
 }
 
 // Every scene's main camera starts zoomed to fit and centered on the design area; on a
 // resize it refits, keeping whatever it was looking at in the middle. Cameras a game adds
 // itself are left alone.
-type Cameras = Phaser.Cameras.Scene2D.CameraManager & { start(): void; onResize(...args: unknown[]): void };
+type Cameras = Phaser.Cameras.Scene2D.CameraManager & {
+  start(): void;
+  onResize(...args: unknown[]): void;
+};
 const cameras = Phaser.Cameras.Scene2D.CameraManager.prototype as Cameras;
 const { start: startCameras, onResize: resizeCameras } = cameras;
 cameras.start = function () {
@@ -334,7 +481,9 @@ cameras.start = function () {
   this.main.setZoom(zoom()).centerOn(design.width / 2, design.height / 2);
 };
 cameras.onResize = function (...args) {
-  const cam = this.main, x = cam.scrollX + cam.width / 2, y = cam.scrollY + cam.height / 2;
+  const cam = this.main,
+    x = cam.scrollX + cam.width / 2,
+    y = cam.scrollY + cam.height / 2;
   resizeCameras.apply(this, args);
   cam.setZoom(zoom()).centerOn(x, y);
 };
@@ -343,7 +492,10 @@ cameras.onResize = function (...args) {
 const factory = Phaser.GameObjects.GameObjectFactory.prototype;
 const addText = factory.text;
 factory.text = function (x, y, text, style = {}) {
-  return addText.call(this, x, y, text, { resolution: Math.max(1, zoom()), ...style });
+  return addText.call(this, x, y, text, {
+    resolution: Math.max(1, zoom()),
+    ...style,
+  });
 };
 
 // ── boot ────────────────────────────────────────────────────────────────────
@@ -375,8 +527,14 @@ export type Options = {
  * Start the game. The first scene is the boot scene: it loads, then calls `next()`.
  * Scenes whose key starts with `_` (a HUD, an overlay) are never resumed into.
  */
-export function startGame(meta: Meta, scenes: Phaser.Types.Scenes.SceneType[], o: Options = {}) {
-  const key = `game:${location.pathname.split("/").filter(Boolean).at(-1) ?? "game"}`;
+export function startGame(
+  meta: Meta,
+  scenes: Phaser.Types.Scenes.SceneType[],
+  o: Options = {},
+) {
+  const key = `game:${
+    location.pathname.split("/").filter(Boolean).at(-1) ?? "game"
+  }`;
   kit.save = load(key);
   kit.difficulty = new Difficulty(kit.save.difficulty);
   document.title = `${meta.emoji} ${meta.title}`;
@@ -384,7 +542,11 @@ export function startGame(meta: Meta, scenes: Phaser.Types.Scenes.SceneType[], o
   const seed = params.get("seed");
   design.width = o.width ?? 960;
   design.height = o.height ?? 540;
-  const canvasSize = () => [Math.round(innerWidth * density()), Math.round(innerHeight * density())] as const;
+  const canvasSize = () =>
+    [
+      Math.round(innerWidth * density()),
+      Math.round(innerHeight * density()),
+    ] as const;
   const [width, height] = canvasSize();
   const game = new Phaser.Game({
     type: Phaser.AUTO,
@@ -398,7 +560,12 @@ export function startGame(meta: Meta, scenes: Phaser.Types.Scenes.SceneType[], o
     input: { gamepad: true },
     physics: {
       default: "arcade",
-      arcade: { debug, gravity: { x: 0, y: o.gravity ?? 0 }, width: design.width, height: design.height },
+      arcade: {
+        debug,
+        gravity: { x: 0, y: o.gravity ?? 0 },
+        width: design.width,
+        height: design.height,
+      },
     },
     scene: scenes,
   });
@@ -412,7 +579,10 @@ export function startGame(meta: Meta, scenes: Phaser.Types.Scenes.SceneType[], o
   game.events.once(Phaser.Core.Events.READY, () => {
     for (const s of game.scene.getScenes(false).slice(1)) {
       if (s.scene.key.startsWith("_")) continue;
-      s.events.on(Phaser.Scenes.Events.CREATE, () => kit.save.scene = s.scene.key);
+      s.events.on(
+        Phaser.Scenes.Events.CREATE,
+        () => kit.save.scene = s.scene.key,
+      );
     }
   });
 

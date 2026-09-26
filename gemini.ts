@@ -39,7 +39,12 @@ export interface Answer {
 }
 
 export interface VoiceEvents {
-  connected(resumed: boolean): void;
+  /** `resumed`: the session a handle from an earlier run named; `reconnected`: this run's. */
+  connected(how: "new" | "resumed" | "reconnected"): void;
+  /** The earlier run's session was refused (expired, unknown): a new one starts instead. */
+  resumeRefused(reason: string): void;
+  /** A handle that resumes the session as it is now. */
+  handle(handle: string): void;
   goAway(timeLeft?: string): void;
   reconnecting(reason: string, delayMs: number): void;
   /** The first connection never came up: bad config, bad key. Fatal. */
@@ -65,14 +70,21 @@ export interface VoiceOptions {
    * nothing (the signals "can only be sent if automatic activity detection is disabled").
    */
   vad: boolean;
+  /**
+   * A session to resume, from an earlier run. Measured 2026-09-25: a resumed session recalls
+   * what was said (4 of 4) but keeps its first system instruction, ignoring the one sent with
+   * the handle (3 of 3); an unknown handle is closed 1008 "Requested entity was not found".
+   */
+  resume?: string;
   on: VoiceEvents;
 }
 
 const INPUT_TOOL = {
   name: "input",
-  description: "Send work to the builder. The call stays open: notes on what it is doing " +
-    "arrive as it goes, then its result when it has something to show or a question to ask. " +
-    "Nothing is done until a result arrives.",
+  description: "Send work to the builder. The call is acknowledged at once and stays open as " +
+    "the channel for what the builder sends: whether it is thinking or working (for you to " +
+    "know, never to send back), its notes, and its result. A result means the builder is idle, " +
+    "waiting for you, until you send more. Nothing is done until a result arrives.",
   behavior: Behavior.NON_BLOCKING,
   parameters: {
     type: Type.OBJECT,
@@ -94,6 +106,9 @@ export class Voice {
   /** An activityStart was sent on this connection and no activityEnd yet. */
   #active = false;
   #handle?: string;
+  /** #handle is still the earlier run's, not yet accepted. */
+  #resuming = false;
+  #handleWaiters: (() => void)[] = [];
   #everConnected = false;
   #closing = false;
   #attempt = 0;
@@ -104,6 +119,8 @@ export class Voice {
   private constructor(o: VoiceOptions) {
     this.#o = o;
     this.#ai = new GoogleGenAI({ apiKey: o.apiKey });
+    this.#handle = o.resume;
+    this.#resuming = o.resume !== undefined;
   }
 
   static async start(o: VoiceOptions): Promise<Voice> {
@@ -171,6 +188,17 @@ export class Voice {
     return true;
   }
 
+  /** Resolves on the next new handle, or after `ms`: whether one came. */
+  nextHandle(ms: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => resolve(false), ms);
+      this.#handleWaiters.push(() => {
+        clearTimeout(timer);
+        resolve(true);
+      });
+    });
+  }
+
   close() {
     this.#closing = true;
     this.#gen++;
@@ -179,7 +207,7 @@ export class Voice {
     this.#session = undefined;
   }
 
-  async #connect() {
+  async #connect(): Promise<void> {
     const gen = ++this.#gen;
     const config = {
       responseModalities: [Modality.AUDIO],
@@ -204,47 +232,69 @@ export class Voice {
     // undefined, so nothing below the await may reset #ready
     this.#ready = false;
     this.#active = false; // a new connection starts outside any activity
+    // a close before setupComplete leaves connect() pending forever (measured with an unknown
+    // handle): the first connection's failure comes from here instead
+    let refused!: (reason: string) => void;
+    const closedFirst = new Promise<string>((r) => refused = r);
     try {
-      const session = await this.#ai.live.connect({
-        model: MODEL,
-        config,
-        callbacks: {
-          onmessage: (m) => {
-            if (this.#gen === gen) this.#message(m);
+      const session = await Promise.race([
+        this.#ai.live.connect({
+          model: MODEL,
+          config,
+          callbacks: {
+            onmessage: (m) => {
+              if (this.#gen === gen) this.#message(m);
+            },
+            onerror: (e) => this.#o.on.trace("recv", { error: e.message ?? String(e) }),
+            onclose: (e) => {
+              this.#o.on.trace("recv", { close: { code: e.code, reason: e.reason } });
+              if (this.#gen !== gen) return; // an old connection, already replaced
+              const reason = `closed${e.code ? ` ${e.code}` : ""}${
+                e.reason ? `: ${e.reason}` : ""
+              }`;
+              this.#session = undefined;
+              if (!this.#ready && !this.#everConnected) return refused(reason);
+              this.#ready = false;
+              this.#reconnect(reason);
+            },
           },
-          onerror: (e) => this.#o.on.trace("recv", { error: e.message ?? String(e) }),
-          onclose: (e) => {
-            this.#o.on.trace("recv", { close: { code: e.code, reason: e.reason } });
-            if (this.#gen !== gen) return; // an old connection, already replaced
-            const reason = `closed${e.code ? ` ${e.code}` : ""}${e.reason ? `: ${e.reason}` : ""}`;
-            this.#session = undefined;
-            if (!this.#ready && !this.#everConnected) return this.#o.on.setupFailed(reason);
-            this.#ready = false;
-            this.#reconnect(reason);
-          },
-        },
-      });
+        }),
+        closedFirst,
+      ]);
+      if (typeof session === "string") return this.#firstFailed(session);
       if (this.#gen === gen) this.#session = session;
       else session.close(); // closed or replaced while connecting
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
-      if (!this.#everConnected) return this.#o.on.setupFailed(reason);
+      if (!this.#everConnected) return this.#firstFailed(reason);
       return this.#reconnect(reason);
     }
+  }
+
+  /** The first connection failed: with the earlier run's handle, try a new session; else fatal. */
+  #firstFailed(reason: string): Promise<void> | void {
+    if (!this.#resuming) return this.#o.on.setupFailed(reason);
+    this.#resuming = false;
+    this.#handle = undefined;
+    this.#o.on.resumeRefused(reason);
+    return this.#connect();
   }
 
   #message(m: LiveServerMessage) {
     const on = this.#o.on;
     on.trace("recv", m);
     if (m.setupComplete) {
-      const resumed = this.#everConnected;
+      const how = this.#everConnected ? "reconnected" : this.#resuming ? "resumed" : "new";
       this.#ready = true;
       this.#everConnected = true;
+      this.#resuming = false;
       this.#attempt = 0;
-      on.connected(resumed);
+      on.connected(how);
     }
     if (m.sessionResumptionUpdate?.resumable && m.sessionResumptionUpdate.newHandle) {
       this.#handle = m.sessionResumptionUpdate.newHandle;
+      on.handle(this.#handle);
+      for (const w of this.#handleWaiters.splice(0)) w();
     }
     if (m.goAway) {
       on.goAway(m.goAway.timeLeft);

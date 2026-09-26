@@ -12,8 +12,10 @@ export interface DoorEvent {
   ts: string;
   type: string;
   envelope?: { conversation?: { address?: string }; sender?: { name?: string } };
-  payload?: { turn_id?: string; ref_id?: string };
-  extra?: { silence?: boolean };
+  /** `stop_reason` is stamped on the last event of a model step: `end_turn` ends the turn. */
+  payload?: { turn_id?: string; ref_id?: string; stop_reason?: string };
+  /** `consumed`: the last event the step that wrote this message had read (UUIDv7 order). */
+  extra?: { silence?: boolean; consumed?: string };
   parts?: { type: string; kind?: string; text?: string; data?: unknown }[];
 }
 
@@ -145,10 +147,29 @@ export function textOf(e: DoorEvent): string {
     .join(" ");
 }
 
-/** The builder's reply: its own message in its mind's room, not a silence, with text. */
-export function isReply(e: DoorEvent, address: string): boolean {
+/** The builder's own words in its mind's room: not a silence, with text. */
+function spoken(e: DoorEvent, address: string): boolean {
   return e.type === "message" && e.payload?.turn_id !== undefined &&
     e.envelope?.conversation?.address === address && e.extra?.silence !== true && textOf(e) !== "";
+}
+
+/** The builder's reply: what it says as its turn ends. */
+export function isReply(e: DoorEvent, address: string): boolean {
+  return spoken(e, address) && e.payload?.stop_reason === "end_turn";
+}
+
+/**
+ * What the builder says between two steps of a turn ("Let me build contact sheets to
+ * actually see them"): a note on its way, not a reply. liquen sends it as a message like any
+ * other; the missing `end_turn` tells them apart.
+ */
+export function isSaying(e: DoorEvent, address: string): boolean {
+  return spoken(e, address) && e.payload?.stop_reason !== "end_turn";
+}
+
+/** The last event the builder had read when it wrote this: the requests it answers. */
+export function consumedOf(e: DoorEvent): string | undefined {
+  return e.extra?.consumed;
 }
 
 /** A tool call the builder made: its name and a clipped rendering of the input. */
@@ -156,7 +177,19 @@ export function toolUseOf(e: DoorEvent): { name: string; input: string } | undef
   if (e.type !== "tool_use") return undefined;
   const data = e.parts?.[0]?.data as { name?: string; input?: unknown } | undefined;
   if (!data?.name) return undefined;
-  return { name: data.name, input: clip(JSON.stringify(data.input ?? {}), 200) };
+  return { name: data.name, input: clip(inputLine(data.input).replace(/\s+/g, " "), 200) };
+}
+
+/** A tool's input in one line: bash's command, a path, a URL, else its first string, else JSON. */
+function inputLine(input: unknown): string {
+  if (input && typeof input === "object") {
+    const o = input as Record<string, unknown>;
+    const first = [o.command, o.path, o.url, ...Object.values(o)].find((v) =>
+      typeof v === "string"
+    );
+    if (typeof first === "string") return first;
+  }
+  return JSON.stringify(input ?? {});
 }
 
 /** The builder's thinking before a step, its last paragraph: what it is about to do, in words. */
