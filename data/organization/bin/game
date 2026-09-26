@@ -61,14 +61,17 @@ async function gameDir(slug: string | undefined) {
   if (!slug) fail("which game? `game help`");
   const dir = join(GAMES, slug);
   if (!(await exists(join(dir, "main.ts")))) fail(`no game called ${slug} (no ${dir}/main.ts)`);
+  if (await exists(join(dir, "app.json"))) fail(`${slug} is an app, not a game: \`game publish\` publishes it`);
   return dir;
 }
 
 async function slugs() {
   const all: string[] = [];
   for await (const e of Deno.readDir(GAMES)) {
+    // a folder with app.json is an app (plain TypeScript, no Phaser): publish handles it apart
     if (e.isDirectory && !e.name.startsWith(".") &&
-      await exists(join(GAMES, e.name, "main.ts"))) all.push(e.name);
+      await exists(join(GAMES, e.name, "main.ts")) &&
+      !(await exists(join(GAMES, e.name, "app.json")))) all.push(e.name);
   }
   return all.sort();
 }
@@ -439,23 +442,20 @@ async function publish(slug?: string) {
     console.log(r.text);
     cards.push(`<a href="./${s}/"><span>${meta.emoji}</span><b>${meta.title}</b><i>${meta.description}</i></a>`);
   }
-  // apps/<slug>/ (app.json + index.html + main.ts, plain TypeScript): tools for grown-ups,
-  // published beside the games when their app.json has "published"
-  const APPS = join(ORG, "apps");
-  if (await exists(APPS)) {
-    for await (const e of Deno.readDir(APPS)) {
-      const dir = join(APPS, e.name);
-      if (!e.isDirectory || !(await exists(join(dir, "app.json")))) continue;
-      const meta = JSON.parse(await Deno.readTextFile(join(dir, "app.json")));
-      if (!meta.published) continue;
-      const out = join(site, e.name);
-      await Deno.mkdir(out, { recursive: true });
-      const r = await sh(["deno", "bundle", "--minify", "--platform", "browser", "-o", join(out, "main.js"), join(dir, "main.ts")], { quiet: true });
-      if (!r.ok) fail(`build failed for app ${e.name}, nothing deployed:\n${r.text}`);
-      await Deno.copyFile(join(dir, "index.html"), join(out, "index.html"));
-      console.log(`built app ${e.name}`);
-      cards.push(`<a href="./${e.name}/"><span>${meta.emoji}</span><b>${meta.title}</b><i>${meta.description}</i></a>`);
-    }
+  // games/<slug>/ with app.json instead of game.json (index.html + main.ts, plain TypeScript):
+  // tools for grown-ups, published beside the games when their app.json has "published"
+  for await (const e of Deno.readDir(GAMES)) {
+    const dir = join(GAMES, e.name);
+    if (!e.isDirectory || !(await exists(join(dir, "app.json")))) continue;
+    const meta = JSON.parse(await Deno.readTextFile(join(dir, "app.json")));
+    if (!meta.published) continue;
+    const out = join(site, e.name);
+    await Deno.mkdir(out, { recursive: true });
+    const r = await sh(["deno", "bundle", "--minify", "--platform", "browser", "-o", join(out, "main.js"), join(dir, "main.ts")], { quiet: true });
+    if (!r.ok) fail(`build failed for app ${e.name}, nothing deployed:\n${r.text}`);
+    await Deno.copyFile(join(dir, "index.html"), join(out, "index.html"));
+    console.log(`built app ${e.name}`);
+    cards.push(`<a href="./${e.name}/"><span>${meta.emoji}</span><b>${meta.title}</b><i>${meta.description}</i></a>`);
   }
   if (!cards.length) fail("nothing published yet: `game publish <slug>`");
   await Deno.writeTextFile(join(site, "index.html"), indexPage(cards));
