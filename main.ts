@@ -117,8 +117,16 @@ if (unknown.length) {
   Deno.exit(1);
 }
 // liquen's session names (its session.ts): they go in addresses and paths
-if (!/^[a-z][a-z0-9_-]*$/.test(sessionName)) {
-  term.error(`--session "${sessionName}": lowercase, digits, - and _, a letter first`);
+const SESSION_NAME = /^[a-z][a-z0-9_-]*$/;
+if (!SESSION_NAME.test(sessionName)) {
+  const near = sessionName.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-").replace(/^[^a-z]+/, "");
+  term.error(
+    `--session "${sessionName}" can't name a session: it takes only a to z without accents ` +
+      `or ñ, digits, - and _, and starts with a letter${
+        SESSION_NAME.test(near) ? `. Try --session ${near}` : ""
+      }`,
+  );
   Deno.exit(1);
 }
 let pushKey: number | undefined, toggleKey: number | undefined;
@@ -216,12 +224,15 @@ const SESSION_LINE = /^ *\d+\.\d+ boot +session (\S+)$/m;
 const CHAT_LINE = /^ *\d+\.\d+ chat +(.*)$/;
 const TAIL_LINES = 150, TAIL_CHARS = 16_000;
 
-/** The last chat lines of this session's earlier runs (the ones log/ keeps), oldest first. */
-async function earlierTail(): Promise<string | undefined> {
+/**
+ * The last chat lines of this session's runs (the ones log/ keeps, this one too; with --fresh,
+ * this one only), oldest first.
+ */
+async function logTail(): Promise<string | undefined> {
   const base = join(ROOT, "log");
   const runs: string[] = [];
   for await (const e of Deno.readDir(base)) {
-    if (e.isDirectory && join(base, e.name) !== log.dir) runs.push(e.name);
+    if (e.isDirectory && (!fresh || join(base, e.name) === log.dir)) runs.push(e.name);
   }
   /** Newest run first, each one's lines oldest first. */
   const blocks: string[][] = [];
@@ -787,6 +798,24 @@ async function endSession() {
   saveSession();
 }
 
+/**
+ * A new session where this conversation's was lost (expired, refused by the server, or started
+ * over for a changed INSTRUCTIONS.md): what was said before comes back from the log, as context
+ * first thing after the instructions. --fresh means no past before the run.
+ */
+async function sendTail() {
+  const tail = await logTail();
+  if (!tail || !up.voice) return;
+  up.voice.context(
+    "(Not a turn, nothing to answer: this conversation's earlier voice session can't be " +
+      "resumed, so here is the end of its log. 🧒 is your client, 🗣️ is you, `input:` " +
+      "what you sent the builder, and the other lines what it sent back.)\n\n" + tail,
+  );
+  const n = tail.split("\n").length;
+  term.dim(`the voice session was lost; it gets the last ${n} lines of the log`);
+  log.line("session", `sent the log's tail as context: ${n} lines, ${tail.length} chars`);
+}
+
 // 5. Gemini
 const last = lastSession();
 /** The voice picked up the last run's session. */
@@ -808,17 +837,29 @@ up.voice = await Voice.start({
       term.dim(
         {
           new: `gemini connected (${language})${
-            "why" in last ? `: a new session, ${last.why}` : ""
+            up.voice ? ": a new session" : "why" in last ? `: a new session, ${last.why}` : ""
           }`,
           resumed: `gemini resumed the last session, from ${minutes} min ago (--fresh: a new one)`,
           reconnected: "gemini reconnected",
         }[how],
       );
-      // a new connection knows no activity: if the mic is open, the turn is on
-      if (how === "reconnected" && open) up.voice?.activityStart();
+      // up.voice is unset while Voice.start runs: the rest is for a connection later in the run
+      if (!up.voice) return;
+      void (async () => {
+        if (how === "new") {
+          // the session was lost mid-run: the open call went with it, and the past is the log's
+          channel = undefined;
+          await sendTail();
+        }
+        // a new connection knows no activity: if the mic is open, the turn is on
+        if (open) up.voice?.activityStart();
+      })();
     },
     resumeRefused(reason) {
-      term.dim(`the last session can't be resumed (${reason}); starting a new one`);
+      term.dim(
+        `${up.voice ? "the voice session" : "the last session"} can't be resumed (${reason}); ` +
+          "starting a new one",
+      );
       log.line("session", `refused: ${reason}`);
     },
     handle(h) {
@@ -896,22 +937,7 @@ up.voice = await Voice.start({
     },
   },
 });
-// a new session where this one's was lost (expired, refused by the server, or started over
-// for a changed INSTRUCTIONS.md): what was said before comes back from the log, as context
-// first thing after the instructions. --fresh means no past.
-if (!resumed && !fresh) {
-  const tail = await earlierTail();
-  if (tail) {
-    up.voice.context(
-      "(Not a turn, nothing to answer: this conversation's earlier voice session can't be " +
-        "resumed, so here is the end of its log. 🧒 is your client, 🗣️ is you, `input:` " +
-        "what you sent the builder, and the other lines what it sent back.)\n\n" + tail,
-    );
-    const n = tail.split("\n").length;
-    term.dim(`the voice session was lost; it gets the last ${n} lines of the log`);
-    log.line("session", `sent the log's tail as context: ${n} lines, ${tail.length} chars`);
-  }
-}
+if (!resumed && !fresh) await sendTail();
 // an open activity would hold the answer until it ends: the kick goes only while the mic is closed
 if (sayHi && !open) {
   up.voice.sendText(

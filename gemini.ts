@@ -39,9 +39,18 @@ export interface Answer {
 }
 
 export interface VoiceEvents {
-  /** `resumed`: the session a handle from an earlier run named; `reconnected`: this run's. */
+  /**
+   * The session is up and takes input. `new`: one with no past, at the start or after
+   * `resumeRefused`; `resumed`: the session a handle from an earlier run named; `reconnected`:
+   * this run's.
+   */
   connected(how: "new" | "resumed" | "reconnected"): void;
-  /** The earlier run's session was refused (expired, unknown): a new one starts instead. */
+  /**
+   * The server closed a connection resuming a session before its setup completed: that session
+   * is gone (expired, unknown, or broken on the server), and a new one starts instead. Measured
+   * 2026-09-26: after a 1007 mid-run, 34 of 34 resumptions of its handle closed 1011 "Internal
+   * error encountered", and a new session came up at once.
+   */
   resumeRefused(reason: string): void;
   /** A handle that resumes the session as it is now. */
   handle(handle: string): void;
@@ -106,10 +115,12 @@ export class Voice {
   /** An activityStart was sent on this connection and no activityEnd yet. */
   #active = false;
   #handle?: string;
-  /** #handle is still the earlier run's, not yet accepted. */
+  /** This connection resumes #handle's session. */
   #resuming = false;
   #handleWaiters: (() => void)[] = [];
   #everConnected = false;
+  /** Set up, and `connected` not yet told: it waits for #session, see #connect. */
+  #setUp?: "new" | "resumed" | "reconnected";
   #closing = false;
   #attempt = 0;
   /** Bumped per connection attempt: callbacks of an older connection are ignored. */
@@ -120,7 +131,6 @@ export class Voice {
     this.#o = o;
     this.#ai = new GoogleGenAI({ apiKey: o.apiKey });
     this.#handle = o.resume;
-    this.#resuming = o.resume !== undefined;
   }
 
   static async start(o: VoiceOptions): Promise<Voice> {
@@ -246,8 +256,10 @@ export class Voice {
     // undefined, so nothing below the await may reset #ready
     this.#ready = false;
     this.#active = false; // a new connection starts outside any activity
+    this.#resuming = this.#handle !== undefined;
+    this.#setUp = undefined;
     // a close before setupComplete leaves connect() pending forever (measured with an unknown
-    // handle): the first connection's failure comes from here instead
+    // handle): the refusal comes from here instead
     let refused!: (reason: string) => void;
     const closedFirst = new Promise<string>((r) => refused = r);
     try {
@@ -267,7 +279,7 @@ export class Voice {
                 e.reason ? `: ${e.reason}` : ""
               }`;
               this.#session = undefined;
-              if (!this.#ready && !this.#everConnected) return refused(reason);
+              if (!this.#ready) return refused(reason);
               this.#ready = false;
               this.#reconnect(reason);
             },
@@ -275,35 +287,51 @@ export class Voice {
         }),
         closedFirst,
       ]);
-      if (typeof session === "string") return this.#firstFailed(session);
-      if (this.#gen === gen) this.#session = session;
-      else session.close(); // closed or replaced while connecting
+      if (typeof session === "string") return this.#refused(session);
+      if (this.#gen !== gen) return session.close(); // closed or replaced while connecting
+      this.#session = session;
+      this.#tellConnected();
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
-      if (!this.#everConnected) return this.#firstFailed(reason);
+      if (!this.#everConnected) return this.#refused(reason);
       return this.#reconnect(reason);
     }
   }
 
-  /** The first connection failed: with the earlier run's handle, try a new session; else fatal. */
-  #firstFailed(reason: string): Promise<void> | void {
-    if (!this.#resuming) return this.#o.on.setupFailed(reason);
-    this.#resuming = false;
-    this.#handle = undefined;
-    this.#o.on.resumeRefused(reason);
-    return this.#connect();
+  /**
+   * The server closed before setupComplete. Resuming, a new session starts (see
+   * `resumeRefused`); a new session refused at the start is fatal, later it is retried.
+   */
+  #refused(reason: string): Promise<void> | void {
+    if (this.#resuming) {
+      this.#handle = undefined;
+      this.#o.on.resumeRefused(reason);
+      return this.#connect();
+    }
+    if (!this.#everConnected) return this.#o.on.setupFailed(reason);
+    this.#reconnect(reason);
+  }
+
+  /**
+   * `connected` once the session takes input: setupComplete arrives before connect() returns
+   * (see #connect), and whatever `connected` sends would be dropped without #session.
+   */
+  #tellConnected() {
+    const how = this.#setUp;
+    if (!how || !this.connected) return;
+    this.#setUp = undefined;
+    this.#o.on.connected(how);
   }
 
   #message(m: LiveServerMessage) {
     const on = this.#o.on;
     on.trace("recv", m);
     if (m.setupComplete) {
-      const how = this.#everConnected ? "reconnected" : this.#resuming ? "resumed" : "new";
+      this.#setUp = !this.#resuming ? "new" : this.#everConnected ? "reconnected" : "resumed";
       this.#ready = true;
       this.#everConnected = true;
-      this.#resuming = false;
       this.#attempt = 0;
-      on.connected(how);
+      this.#tellConnected();
     }
     if (m.sessionResumptionUpdate?.resumable && m.sessionResumptionUpdate.newHandle) {
       this.#handle = m.sessionResumptionUpdate.newHandle;
