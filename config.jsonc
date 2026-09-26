@@ -7,16 +7,14 @@
   "system": {
     // a bash call's wall cap unless the model asks for another
     "bashTimeoutMs": 120000,
-    // est. tokens of raw event JSON (~1.8x the prompt) before a checkpoint runs. The
-    // default (50000, a ~28K prompt) is tuned for a chatty agent: here a turn reads a whole
-    // game and a checkpoint costs ~20 s and forgets it, so the window is wider. Raised
-    // together with windowLimit, which caps what the window can weigh
+    // est. tokens of raw event JSON (~1.8x the prompt) before a checkpoint runs, in the idle
+    // gap after a turn (never while one runs, never before a wish is answered). The default
+    // (50000, a ~28K prompt) is tuned for a chatty agent: here a turn reads a whole game and
+    // a checkpoint forgets it, so the window is wider. Raised together with windowLimit,
+    // which caps what the window can weigh
     "compactAt": 150000,
     // est. tokens a checkpoint leaves uncovered
     "keepRecent": 20000,
-    // est. tokens the running turn may weigh before a checkpoint cuts into it; under it, a
-    // checkpoint covers closed turns only
-    "compactTurnAt": 150000,
     // history query cap — the prompt's size guard
     "windowLimit": 1500,
     // how long a world message waits for the rest of its burst before a turn runs
@@ -41,9 +39,13 @@
       // model provider (the transport seam); null ⇒ Anthropic
       "provider": null,
       // the tools offered to the model, by name — built-ins and exec tools (bash, MCP) alike; null ⇒ every tool the deployment has. Add "send" where the agent has peers or a world to write to — a reply to its own principal is its plain answer, never a call — and "contact" where an account keeps an address book the agent may write
-      "tools": ["search","schedule","cancel","bash"],
+      "tools": ["search", "schedule", "cancel", "bash"],
       // permission policy: first match decides (allow|ask|deny); * matches any tool; connection/conversation pin a rule to where a send lands
-      "rules": [{"tool":"send","action":"ask"},{"tool":"contact","action":"ask"},{"tool":"*","action":"allow"}],
+      "rules": [
+        { "tool": "send", "action": "ask" },
+        { "tool": "contact", "action": "ask" },
+        { "tool": "*", "action": "allow" }
+      ],
       // attention: a conversation stays hot this long after the agent's own last word
       "engagedMinutes": 15,
       // attention: an ambient pile this deep wakes the agent before the interval does
@@ -77,4 +79,3 @@
   "connections": {
   }
 }
-
