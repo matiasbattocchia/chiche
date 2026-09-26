@@ -1,8 +1,8 @@
 // liquen.ts — the door client. Speaks liquen's door protocol directly (../liquen/src/door.ts):
 // newline-separated JSON over data/agents/<user>/door.sock, requests answered in order, and
 // after a `tail` the same connection pushes {event}, {delta} and {status} lines. A line with
-// `ok` is a reply; anything else is a push. The session is `mind`, the default, shared with
-// the REPL.
+// `ok` is a reply; anything else is a push. Every request names the session (`mind` unless
+// chiche runs with --session), so `liquen repl --session <name>` shows the same room.
 
 import { TextLineStream } from "@std/streams";
 
@@ -48,14 +48,16 @@ export interface DoorEvents {
 
 export class Door {
   readonly user: string;
+  readonly session: string;
   #conn: Deno.UnixConn;
   #on: DoorEvents;
   #awaiting: ((r: Reply) => void)[] = [];
   #writes: Promise<void> = Promise.resolve();
   #closing = false;
 
-  private constructor(user: string, conn: Deno.UnixConn, on: DoorEvents) {
+  private constructor(user: string, session: string, conn: Deno.UnixConn, on: DoorEvents) {
     this.user = user;
+    this.session = session;
     this.#conn = conn;
     this.#on = on;
     this.#pump().catch(() => {}).finally(() => {
@@ -71,13 +73,19 @@ export class Door {
     return `${dir}/agents/${user}/door.sock`;
   }
 
-  /** Connect and `tail`; throws when nothing answers. The session thinks with the model
-   *  config.jsonc gives the agent, and its shell starts in `shell` (liquen's shell keeps
-   *  its directory between commands). */
-  static async connect(dir: string, user: string, shell: string, on: DoorEvents): Promise<Door> {
+  /** Connect and `tail` `session` (naming it is what births it); throws when nothing answers.
+   *  The session thinks with the model config.jsonc gives the agent, and its shell starts in
+   *  `shell` (liquen's shell keeps its directory between commands). */
+  static async connect(
+    dir: string,
+    user: string,
+    session: string,
+    shell: string,
+    on: DoorEvents,
+  ): Promise<Door> {
     const conn = await Deno.connect({ transport: "unix", path: Door.socket(dir, user) });
-    const door = new Door(user, conn, on);
-    const t = await door.request({ op: "tail", cwd: shell });
+    const door = new Door(user, session, conn, on);
+    const t = await door.request({ op: "tail", session, cwd: shell });
     if (!t.ok) {
       door.close();
       throw new Error(`tail refused: ${t.error}`);
@@ -96,9 +104,9 @@ export class Door {
     }
   }
 
-  /** The builder's conversation: `mind@<user>`. */
+  /** The builder's conversation: `<session>@<user>`. */
   get address() {
-    return `mind@${this.user}`;
+    return `${this.session}@${this.user}`;
   }
 
   request(req: Record<string, unknown>): Promise<Reply> {
@@ -111,9 +119,14 @@ export class Door {
     return reply;
   }
 
-  /** A message from the principal to the builder's mind → `{ok, id}`. */
+  /** A message from the principal to the builder's session → `{ok, id}`. */
   message(text: string): Promise<Reply> {
-    return this.request({ op: "message", text, sender: { address: this.user, name: this.user } });
+    return this.request({
+      op: "message",
+      text,
+      session: this.session,
+      sender: { address: this.user, name: this.user },
+    });
   }
 
   close() {

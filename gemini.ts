@@ -173,6 +173,20 @@ export class Voice {
     this.#session!.sendRealtimeInput({ text });
   }
 
+  /**
+   * Text as the user's, to be read and not answered: context. The skill's migration notes for
+   * 3.8: client content "is supported throughout the entire session lifecycle with explicit
+   * roles", and "if you send content without `turn_complete`, the server waits for subsequent
+   * messages before responding". Measured 2026-09-26: no answer in the 6 s after it (6 of 6),
+   * and the next realtime text was answered from it (3 of 3; 0 of 3 without it).
+   */
+  context(text: string) {
+    if (!this.connected) return;
+    const turns = [{ role: "user", parts: [{ text }] }];
+    this.#o.on.trace("send", { clientContent: { turns, turnComplete: false } });
+    this.#session!.sendClientContent({ turns, turnComplete: false });
+  }
+
   /** One answer to an open `input` call. Returns false when disconnected (the answer is lost). */
   answer(a: Answer): boolean {
     if (!this.connected) return false;

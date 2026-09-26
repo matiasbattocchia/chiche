@@ -17,6 +17,8 @@ export class Terminal {
   #rows = 0;
   #cols = 0;
   #status: string[] = [];
+  /** A transcript ended: who spoke, and all they said. */
+  said?: (who: string, text: string) => void;
   #resize = () => {
     this.#size();
     this.#region();
@@ -41,6 +43,7 @@ export class Terminal {
     if (!live) return;
     this.#live = undefined;
     this.#write(this.#pinned ? `${live.who} ${live.text.trim()}\n` : "\n");
+    if (live.text.trim()) this.said?.(live.who, live.text.trim());
     this.#draw();
   }
   line(text: string) {
