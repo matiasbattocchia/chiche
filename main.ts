@@ -15,7 +15,7 @@ import { encodeHex } from "@std/encoding/hex";
 import { dirname, fromFileUrl, join } from "@std/path";
 import { TextLineStream } from "@std/streams";
 import { Audio, type Device, type Mixer, mixer, unmute, VOICE_RATE, watchMixer } from "./audio.ts";
-import { MODEL, Scheduling, Voice } from "./gemini.ts";
+import { INPUT_TOOL, MODEL, Scheduling, Voice } from "./gemini.ts";
 import { keyCode, keyName, Keys } from "./keys.ts";
 import { clip, Door, errorOf, isReply, isSaying, textOf, toolUseOf } from "./liquen.ts";
 import { Log } from "./log.ts";
@@ -154,8 +154,8 @@ const instructions = (await Deno.readTextFile(join(ROOT, "INSTRUCTIONS.md"))).re
  * The voice's session outlives a run: its latest handle is kept here, and the next run resumes
  * it, remembering what was said. Google's session docs: "Resumption tokens are valid for 2 hr
  * after the last sessions termination". A resumed session keeps the system instruction it
- * started with (measured, see gemini.ts), so a changed INSTRUCTIONS.md, language, model or
- * --vad starts a new one, and so does --fresh. One per --session name, all in one file (log/
+ * started with (measured, see gemini.ts), so a changed INSTRUCTIONS.md, input tool, language,
+ * model or --vad starts a new one, and so does --fresh. One per --session name, all in one file (log/
  * keeps its folders for the runs).
  */
 const SESSIONS = join(ROOT, "log", "sessions.json");
@@ -171,7 +171,9 @@ interface SavedSession {
 const sessionKey = encodeHex(
   await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(JSON.stringify({ instructions, language, vad, model: MODEL })),
+    new TextEncoder().encode(
+      JSON.stringify({ instructions, tool: INPUT_TOOL, language, vad, model: MODEL }),
+    ),
   ),
 );
 
@@ -189,7 +191,9 @@ function lastSession(): { handle: string; ago: number } | { why: string } {
   const s = savedSessions()[sessionName];
   if (!s) return { why: "no earlier session" };
   const ago = Date.now() - s.savedAt;
-  if (s.key !== sessionKey) return { why: "INSTRUCTIONS.md, the language or --vad changed" };
+  if (s.key !== sessionKey) {
+    return { why: "INSTRUCTIONS.md, the input tool, the language or --vad changed" };
+  }
   if (ago > RESUME_MS) return { why: `the last one ended ${Math.round(ago / 60_000)} min ago` };
   return { handle: s.handle, ago };
 }
@@ -385,6 +389,41 @@ let doorGone = false;
 const UPDATE_QUIET_MS = 30_000;
 /** Last time anyone spoke: the mic opening or closing, the voice's audio, a turn completing. */
 let lastTalk = performance.now();
+/** The builder's last sign of life: a wish sent, or anything from the door since. */
+let lastSign = performance.now();
+/**
+ * A busy builder silent this long may be stuck, and the update says so. Its steps came 2–10 s
+ * apart in log/2026-09-26T22-58-04, where a model call refused and retried showed nothing at
+ * all for 124 s and 132 s before its error arrived.
+ */
+const STUCK_MS = 60_000;
+
+/**
+ * What a builder error means for the work, as the voice hears it; the raw error is the
+ * door's line in the log. A 429 is the builder's model refusing work: a daily quota used up
+ * ("limit: 20 requests per day on Free Tier", measured) refuses every try until the next
+ * day, any other clears within minutes.
+ */
+function trouble(error: string): string {
+  const stopped = "nothing more is being built, and nothing new is ready";
+  if (/per ?day/i.test(error)) {
+    return "error: the builder stopped: its model's quota for today is used up, so nothing " +
+      `more can be built today; ${stopped}`;
+  }
+  if (/\b429\b|RESOURCE_EXHAUSTED/.test(error)) {
+    return "error: the builder stopped: its model is refusing work for now (too many " +
+      `requests); ${stopped}. Sent again in a few minutes, it may work`;
+  }
+  return `error: the builder stopped on a failure (${clip(error, 200)}); ${stopped}`;
+}
+
+/** The builder stopped on an error. */
+function failed(error: string) {
+  concluded = true;
+  awaiting = false;
+  term.dim(`builder error: ${clip(error.replaceAll("\n", " "), 200)}`);
+  forward(trouble(error), Scheduling.WHEN_IDLE);
+}
 
 /** Answer scheduling that makes the voice speak unless it already has in this answer. */
 const unlessSpoken = () => received > 0 ? Scheduling.SILENT : Scheduling.WHEN_IDLE;
@@ -422,6 +461,7 @@ if (!noLiquen) {
   up.door = await Door.connect(DATA, user, sessionName, join(DATA, "organization"), {
     trace: (d, m) => log.door(d, m),
     event(e) {
+      lastSign = performance.now();
       if (toolUseOf(e)) return become("working");
       if (up.door && isSaying(e, up.door.address)) {
         return forward(`note: ${textOf(e)}`, Scheduling.SILENT);
@@ -433,18 +473,11 @@ if (!noLiquen) {
         return forward(`result: ${textOf(e)}`, Scheduling.WHEN_IDLE);
       }
       const error = errorOf(e);
-      if (error) {
-        concluded = true;
-        awaiting = false;
-        return forward(`error (the builder stopped): ${error}`, Scheduling.WHEN_IDLE);
-      }
+      if (error) return failed(error);
     },
     delta(d) {
-      if (d.kind === "error" && d.text) {
-        concluded = true;
-        awaiting = false;
-        return forward(`error (the builder stopped): ${d.text}`, Scheduling.WHEN_IDLE);
-      }
+      lastSign = performance.now();
+      if (d.kind === "error" && d.text) return failed(d.text);
       if (d.kind === "thinking" || d.kind === "text") become("thinking");
     },
     // the door's turn edges; a turn that ended with no result and no error (a silence) is
@@ -490,6 +523,7 @@ async function input(callId: string, text: string) {
   if (r.ok && typeof r.id === "string") {
     term.dim(`sent (${r.id.slice(-6)})`);
     awaiting = true;
+    lastSign = performance.now();
     // sent into a checkpoint: the door is busy already and shows no new edge when the
     // wish's turn starts after it, so the wait counts from here
     if (doorBusy) {
@@ -517,10 +551,16 @@ function update() {
   ) return;
   lastTalk = now; // the next one after another quiet stretch, whether the voice speaks or not
   const s = Math.round((now - busySince) / 1000);
+  const silent = Math.round((now - lastSign) / 1000);
   forward(
     // "no result yet": run log/2026-09-26T11-40-42 had the voice announce the publish done
     // on an update, 40 s before the result came
-    `update: still ${state === "idle" ? "busy" : state}, ${s} s in, no result yet: nothing is done`,
+    now - lastSign > STUCK_MS
+      ? `update: still busy, ${s} s in, but nothing from the builder for ${silent} s: it may ` +
+        "be stuck. No result yet: nothing is done"
+      : `update: still ${
+        state === "idle" ? "busy" : state
+      }, ${s} s in, no result yet: nothing is done`,
     Scheduling.WHEN_IDLE,
   );
 }

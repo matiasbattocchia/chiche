@@ -88,12 +88,13 @@ export interface VoiceOptions {
   on: VoiceEvents;
 }
 
-const INPUT_TOOL = {
+export const INPUT_TOOL = {
   name: "input",
   description: "Send work to the builder. The call is acknowledged at once and stays open as " +
     "the channel for what the builder sends: whether it is thinking or working (for you to " +
-    "know, never to send back), its notes, and its result. A result means the builder is idle, " +
-    "waiting for you, until you send more. Nothing is done until a result arrives.",
+    "know, never to send back), its notes, and its result or its error. Either one means the " +
+    "builder is idle, waiting for you, until you send more. Nothing is done until a result " +
+    "arrives; after an error, nothing more is being built.",
   behavior: Behavior.NON_BLOCKING,
   parameters: {
     type: Type.OBJECT,
