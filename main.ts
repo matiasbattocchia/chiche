@@ -546,7 +546,7 @@ async function input(callId: string, text: string) {
 function update() {
   const now = performance.now();
   if (
-    busySince === undefined || !channel || open || closing || answering ||
+    busySince === undefined || !channel || open || closing || held || answering ||
     waitingSince !== undefined || up.audio?.playing || now - lastTalk < UPDATE_QUIET_MS
   ) return;
   lastTalk = now; // the next one after another quiet stretch, whether the voice speaks or not
@@ -617,9 +617,26 @@ let open = false;
  * `AudioEvents.chunk`): it is sent, then the turn ends. A stalled capture ends it anyway.
  */
 let closing:
-  | { at: number; why: string; timer: ReturnType<typeof setTimeout>; sent: number }
+  | {
+    at: number;
+    why: string;
+    push: boolean;
+    timer: ReturnType<typeof setTimeout>;
+    sent: number;
+  }
   | undefined;
 const TAIL_WAIT_MS = 300;
+/**
+ * A push-to-talk turn's end waits this long after its tail is sent, and a press before then
+ * goes on with the same turn: a child lets go and goes on. In log/2026-09-26T20-26-58 and
+ * 22-58-04, of the 20 presses that came after a release and before the voice's answer, 15
+ * came within 0.5 s of it, none between 0.5 and 1 s, and 5 at 1.0–1.5 s, as the answer was
+ * due (a turn's end to the voice's first audio: median 1.45 s, half of 38 in 1.35–1.8 s).
+ * 2 s takes in all 20, and adds 2 s before every answer.
+ */
+const APPEND_MS = 2_000;
+/** A push-to-talk turn whose tail is sent, its end held (APPEND_MS). */
+let held: { at: number; timer: ReturnType<typeof setTimeout>; end: () => void } | undefined;
 /**
  * --vad: the turn ended, and silence goes in the mic's place until the voice answers. The server
  * ends a turn only on hearing silence: measured 2026-09-25 with a recorded question, streamed
@@ -639,12 +656,26 @@ let link: "connecting" | "live" | "reconnecting" = "connecting";
 
 const chunks = (n: number) => `${n} chunks ${(n * 0.04).toFixed(1)} s`;
 
-function mic(now: boolean, why: string) {
+/** `push`: the push-to-talk key moved, and a press right after its release goes on with the turn. */
+function mic(now: boolean, why: string, push = false) {
   if (now === open) return;
   open = now;
   lastTalk = performance.now();
   if (open) {
+    const released = held?.at ?? (closing?.push ? closing.at : undefined);
+    if (push && released !== undefined) {
+      clearTimeout(held?.timer);
+      held = undefined;
+      clearTimeout(closing?.timer);
+      closing = undefined;
+      up.voice?.activityStart(); // does nothing unless the connection is new since the release
+      const ms = Math.round(performance.now() - released);
+      term.dim(`mic open (${why}), the same turn`);
+      log.line("mic", `open (${why}), the same turn, ${ms} ms after the release`);
+      return;
+    }
     endTurn("the mic opened again"); // a turn still waiting for its tail ends first
+    held?.end();
     endSilence("the mic opened");
     sent = 0;
     waitingSince = undefined;
@@ -655,6 +686,7 @@ function mic(now: boolean, why: string) {
     closing = {
       at: performance.now(),
       why,
+      push,
       timer: setTimeout(() => endTurn(`no capture for ${TAIL_WAIT_MS} ms`), TAIL_WAIT_MS),
       sent,
     };
@@ -662,26 +694,35 @@ function mic(now: boolean, why: string) {
   }
 }
 
-/** The closed gate's tail is sent, or given up `because` of something: the turn ends. */
+/**
+ * The closed gate's tail is sent, or given up `because` of something: the turn ends, or after
+ * a push-to-talk release is held to end APPEND_MS later.
+ */
 function endTurn(because?: string) {
   if (!closing) return;
   clearTimeout(closing.timer);
-  const { why, sent: before } = closing;
+  const { at, why, push, sent: before } = closing;
   closing = undefined;
-  lastTalk = performance.now();
-  up.voice?.activityEnd();
-  if (up.voice?.connected) {
-    waitingSince = performance.now();
-    if (vad) silence = { since: waitingSince, sent: 0 };
-  }
   const cut = because ? `, cut short: ${because}` : "";
-  term.dim(`mic closed (${why}) · sent ${chunks(sent)}${cut}`);
-  log.line(
-    "mic",
-    `${vad ? "closed, silence follows" : "turn ended"}, sent ${chunks(sent)}, ${
-      sent - before
-    } after closing${cut}`,
-  );
+  const end = () => {
+    clearTimeout(held?.timer);
+    held = undefined;
+    lastTalk = performance.now();
+    up.voice?.activityEnd();
+    if (up.voice?.connected) {
+      waitingSince = performance.now();
+      if (vad) silence = { since: waitingSince, sent: 0 };
+    }
+    term.dim(`mic closed (${why}) · sent ${chunks(sent)}${cut}`);
+    log.line(
+      "mic",
+      `${vad ? "closed, silence follows" : "turn ended"}, sent ${chunks(sent)}, ${
+        sent - before
+      } after closing${cut}, ${Math.round(performance.now() - at)} ms after the gate closed`,
+    );
+  };
+  if (push && !vad) held = { at, timer: setTimeout(end, APPEND_MS), end };
+  else end();
 }
 
 /** --vad: the silence after the turn stops, `because` the turn was heard or it won't be. */
@@ -731,7 +772,7 @@ up.keys = Keys.start({ push: pushKey, toggle: toggleKey }, {
   push(down) {
     const name = keyName(pushKey!);
     log.line("keys", `${name} ${down ? "down" : "up"}`);
-    mic(down, down ? name : `${name} released`);
+    mic(down, down ? name : `${name} released`, true);
   },
   toggle() {
     const name = keyName(toggleKey!);
