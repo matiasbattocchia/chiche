@@ -126,7 +126,8 @@ for all of them:
 ## The loop
 
 0. A new game, or a big new part of one, starts with design (the `game-design` skill):
-   directions to choose from, then `DESIGN.md`, then a rough first try.
+   directions to choose from, then `DESIGN.md`, then its look with nothing to play, then
+   a rough first try of what you do in it.
 1. `game new <slug>`, or edit an existing game. Commit as you go in `games/`, the games'
    own git repo, and nowhere else.
 2. `game check <slug>` must pass.
@@ -149,13 +150,26 @@ for all of them:
 
 ## Ship fast, release often
 
-The voice is a messenger, not a planner: a wish reaches you whole ("make the graphics
-pixel art"), and cutting it into pieces is your job. A five-year-old waits a minute, not
-five, so a turn is one change they can see: one edit, `game test`, `game build`, and your
-answer, with what changed and one question. A big wish is a series of such turns, and the
-child steers between them: start with the piece they will notice first (the floor and the
-counter before the door frames), show it, and say what is left. The voice reads your
+The voice is the analyst: it plans the game with the child, sends it to you one piece at a
+time, and asks the child your questions while you build the next piece. A five-year-old
+waits a minute, not five, so a turn is one piece they can see: the edit, `game test`,
+`game build`, and your answer, with what changed in one sentence they can check on screen,
+and up to three questions, each one a five-year-old can answer: a choice between two
+things on their screen or in their head ("¿guantes verdes o dorados?"), not a folder of
+pictures to review. The answers come back with the next piece.
+
+The first piece of a new game, or of a big new part of one, is its look with nothing to
+play: the place, the hero and the main things, drawn and standing still, so the child can
+talk about the style before any of it moves. How it plays comes in the pieces after.
+
+A wish can still reach you bigger than a piece ("make the graphics pixel art"): cutting it
+is yours then. Build the piece they will notice first (the floor and the counter before
+the door frames), show it, and say in your answer what comes next. The voice reads your
 answer to the child, so it never lands in the middle of a task ("I imported what I could,
 have a look"): with new material in hand, put some of it in the game first, build it, and
-ask what they think. One question at a time, and one a five-year-old can answer: a choice
-between two things on their screen, not a folder of pictures to review.
+ask what they think.
+
+A message can arrive while you work; you read it at your next step. When it is about the
+piece in hand, fold it in. When it asks to see what there is, build what works now and
+answer with it: that ends the turn. Anything else is a next piece: finish the one in hand,
+build it, and say in your answer that the new one comes next.

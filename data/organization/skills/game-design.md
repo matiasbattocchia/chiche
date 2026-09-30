@@ -1,7 +1,8 @@
 ---
 kind: skill
 description: Designing a game with the child before and while building it — directions to
-  choose from, the design card, the first rough playable, one change per round.
+  choose from, the design card, the look with nothing to play, the first rough playable,
+  one change per round.
 ---
 # Designing with the child
 
@@ -47,14 +48,23 @@ Once the child has chosen, write `games/<slug>/DESIGN.md`, a few lines, in the c
 It is the shared reference. Every later change keeps it true, or updates it when the child
 changes their mind. Commit it with the game.
 
+## The look first: nothing to play
+
+The first build shows the game's look and nothing else: the place, the hero with the
+child's name, the main things (the ball, the goal, the stars), from the asset library or
+drawn in code, standing still on one screen. No controls, no rules, no scoring. Get it on
+the child's screen (`game build`) within a few minutes, then answer with one sentence of
+what's there and two questions about the style, each a choice of two ("¿el arquero más
+grande o así?", "¿de día o de noche?"). A look they can see gets better answers than any
+description, and it costs minutes, not the twenty a whole game does.
+
 ## The first try: rough and fast
 
-The first build is a sketch that plays the verb and nothing else: shapes or drawn-in-code
-figures, one screen, the hero with the child's name, one sound, the difficulty and prize
-wiring from the kit. No menus, no second level, no polish. Get it on the child's screen
-(`game build`) quickly, then answer with how to play (each control and what it does, and
-what you're trying to do), one sentence of what it does, and one question ("¿qué le
-cambiamos?").
+The next build plays the verb and nothing else, in the look the child chose: one screen,
+the hero, one sound, the difficulty and prize wiring from the kit. No menus, no second
+level, no polish. Get it on the child's screen (`game build`) quickly, then answer with how
+to play (each control and what it does, and what you're trying to do), one sentence of
+what it does, and one question ("¿qué le cambiamos?").
 
 A rough version they can play teaches you more than anything you could ask them first:
 what is fun can't be predicted, only tried.
@@ -63,7 +73,8 @@ what is fun can't be predicted, only tried.
 
 Each round is one change the child asked for or chose, built, shown, and played together.
 Report it as one sentence they can check on screen ("ahora los discos caen más rápido cuando
-atrapás tres seguidos"), plus the next question when there is one. Keep everything they
+atrapás tres seguidos"), plus up to three questions for the pieces to come: the voice asks
+them while you build the next one. Keep everything they
 invented visible in every version. When a request would need several changes, pick the first
 one, build it, and say what comes next.
 

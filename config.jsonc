@@ -18,7 +18,15 @@
     // history query cap — the prompt's size guard
     "windowLimit": 1500,
     // how long a world message waits for the rest of its burst before a turn runs
-    "debounceMs": 5000
+    "debounceMs": 5000,
+    // where the log and the vault live: null ⇒ SQLite in data/log; a Postgres URL (postgres://user@host:5432/db, ?schema= for one schema of it) ⇒ that database, its password read from PGPASSWORD
+    "database": null,
+    // where the docs live: files under data/ (an agent reads and writes them from its shell), or table — the docs table of the Postgres database above, which an agent reaches through its read · write · edit tools
+    "docs": "files",
+    // where the agents' shells run: null ⇒ this machine; the URL of a Cloudflare sandbox gateway (sandbox/cloudflare in the package) ⇒ one sandbox per agent there, its bearer token read from SANDBOX_API_KEY; needs docs: table, since the sandbox cannot reach files on this machine
+    "sandbox": null,
+    // how long a gateway sandbox lives after its agent's last bash call: the next step past it stops the container, or the gateway does that long after its last request when the harness is quiet; its background jobs and workspace files go with it (the agent is told)
+    "sandboxSleepMinutes": 10
   },
   // this deployment's identity — the clock, the backlog, and every agent's defaults
   "organization": {
@@ -36,16 +44,18 @@
       "effort": null,
       // output cap per model call
       "maxTokens": 64000,
-      // model provider (the transport seam); null ⇒ Anthropic
+      // model provider (anthropic|google); null ⇒ anthropic
       "provider": null,
-      // the tools offered to the model, by name — built-ins and exec tools (bash, MCP) alike; null ⇒ every tool the deployment has. Add "send" where the agent has peers or a world to write to — a reply to its own principal is its plain answer, never a call — and "contact" where an account keeps an address book the agent may write
+      // the tools offered to the model, by name — built-ins and exec tools (bash, MCP) alike; null ⇒ every tool the deployment has. Add "send" where the agent has peers or a world to write to — a reply to its own principal is its plain answer, never a call — "conversation" where it has peers and may open rooms with them, or an account on a wire whose rooms it may change, and "contact" where an account keeps an address book the agent may write
       "tools": ["search", "schedule", "cancel", "bash"],
-      // permission policy: first match decides (allow|ask|deny); * matches any tool; connection/conversation pin a rule to where a send lands
+      // permission policy: first match decides (allow|ask|deny); * matches any tool; connection/conversation pin a rule to where a send lands, connection to whose address book a contact is written in
       "rules": [
         { "tool": "send", "action": "ask" },
         { "tool": "contact", "action": "ask" },
         { "tool": "*", "action": "allow" }
       ],
+      // an ask nobody answers lapses after this many hours — settled as a refusal that says so, and the agent may ask again; null ⇒ it stands until someone answers
+      "gateHours": 24,
       // attention: a conversation stays hot this long after the agent's own last word
       "engagedMinutes": 15,
       // attention: an ambient pile this deep wakes the agent before the interval does
@@ -63,9 +73,18 @@
     // shell command, audio bytes on stdin → transcript on stdout — e.g. "processors/qwen-asr/transcribe.sh" (root-relative; see its README); null ⇒ no transcription
     "audio": null
   },
-  // the roster: every key is an agent, its folder and its unix user
+  // the org's one door — the address the world dials, the one port the org binds, and the tunnel
+  "edge": {
+    // the org's public https:// base — what a tunnel or a real host in front of edge.port answers as; every service's address hangs off it (/<service>/ingest, /<service>/oauth/callback), and the doors print the one to register; null ⇒ the org is reached at http://localhost:<edge.port> only
+    "publicUrl": null,
+    // the org's one port: the edge binds it and the tunnel publishes it — it forwards /<service>/… to that connector's socket under data/run
+    "port": 8788,
+    // the command that publishes edge.port at publicUrl, as an argv (["cloudflared", "tunnel", "run", "acme"]), run and kept alive by `liquen start` beside the org; null ⇒ something else runs it (systemd, a host's own proxy)
+    "tunnel": null
+  },
+  // the roster: every key is a member — an agent, its folder and its unix user, or a person alone (mind: false)
   "agents": {
-    // <name>: any organization.agents key re-declared, plus identity — the principal's name (the agent goes by it) and the handles they are known by; null ⇒ not declared
+    // <name>: any organization.agents key re-declared, plus identity — the name the agent goes by and the handles of the account it acts as (null ⇒ not declared); principals — who steers it, roster names ([] ⇒ nobody; absent ⇒ its owner, or every member when the account is the org's); mind: false — no session runs: a member with no agent of their own, or an agent paused
     "matias": {
       // Gemini Flash at medium: a five-year-old is waiting; Opus took 3-6 s a step and 2.5k
       // tokens of thinking to name tiles. Same GEMINI_API_KEY as the voice, from .env
