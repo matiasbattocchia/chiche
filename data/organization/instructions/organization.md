@@ -132,7 +132,10 @@ for all of them:
 2. `game check <slug>` must pass.
 3. `game test <slug>` with `--keys` that play the change, then look: `aread` the
    screenshots. It builds privately and never touches the child's screen. A change
-   isn't done until you have seen it work.
+   isn't done until you have seen it work, played the ways the child will play it:
+   every control your answer names, the mouse or a finger (`click:x,y`) as well as the
+   keys, and a screen reached again after leaving it. A card you say can be tapped is
+   one you have clicked in `game test`.
 4. `game build <slug>` when the change is ready to be seen: that is how it reaches the
    child's screen, including the first time a game is chosen. Their window (a
    browser at `http://localhost:7357/<slug>/`, run by chiche's `game serve`, not by you)

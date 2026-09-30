@@ -17,7 +17,17 @@ import { TextLineStream } from "@std/streams";
 import { Audio, type Device, type Mixer, mixer, unmute, VOICE_RATE, watchMixer } from "./audio.ts";
 import { INPUT_TOOL, MODEL, Scheduling, Voice } from "./gemini.ts";
 import { keyCode, keyName, Keys } from "./keys.ts";
-import { clip, Door, errorOf, isReply, isSaying, textOf, toolUseOf } from "./liquen.ts";
+import {
+  activityOf,
+  clip,
+  doingOf,
+  Door,
+  errorOf,
+  isReply,
+  isSaying,
+  textOf,
+  toolUseOf,
+} from "./liquen.ts";
 import { Log } from "./log.ts";
 import { BOLD, DIM, GREEN, Meter, RED, RESET, Terminal, YELLOW } from "./term.ts";
 
@@ -364,8 +374,9 @@ let channel: string | undefined;
 /**
  * The builder as the door shows it: idle, or busy and either thinking (the model generates:
  * deltas arrive) or working (its tools run: from a step's first tool use to the next delta).
- * The voice is told each change of state, and no more: not the thinking, not the commands
- * (log/2026-09-26T03-24-21: the voice sent the builder's own thinking back as new tasks).
+ * The voice is told each change of state, silently. The thinking and the commands reach it
+ * only inside an update, digested (`news`), never raw: in log/2026-09-26T03-24-21 the voice
+ * sent the builder's own thinking back as new tasks.
  */
 let state: "idle" | "thinking" | "working" = "idle";
 /** When the builder went busy on a wish, for the updates. */
@@ -391,6 +402,22 @@ const UPDATE_QUIET_MS = 30_000;
 let lastTalk = performance.now();
 /** The builder's last sign of life: a wish sent, or anything from the door since. */
 let lastSign = performance.now();
+/**
+ * What the builder did since the last update, oldest first: its thinking's headings and the
+ * few words each tool call is worth (`doingOf`, `activityOf`). An update carries them for the
+ * voice to tell in the child's words; they never make it speak on their own. In
+ * log/2026-09-29T22-52-58 the voice had only "still working" to say, and said it 30 times
+ * in 31 updates, one sentence six times word for word.
+ */
+let news: string[] = [];
+/** The most an update carries, the latest ones: a minute of steps is 5–15 of them. */
+const NEWS_MAX = 6;
+
+function heard(item: string) {
+  if (news.at(-1) === item) return;
+  news.push(item);
+  if (news.length > NEWS_MAX) news = news.slice(-NEWS_MAX);
+}
 /**
  * A busy builder silent this long may be stuck, and the update says so. Its steps came 2–10 s
  * apart in log/2026-09-26T22-58-04, where a model call refused and retried showed nothing at
@@ -421,6 +448,7 @@ function trouble(error: string): string {
 function failed(error: string) {
   concluded = true;
   awaiting = false;
+  news = [];
   term.dim(`builder error: ${clip(error.replaceAll("\n", " "), 200)}`);
   forward(trouble(error), Scheduling.WHEN_IDLE);
 }
@@ -462,7 +490,13 @@ if (!noLiquen) {
     trace: (d, m) => log.door(d, m),
     event(e) {
       lastSign = performance.now();
-      if (toolUseOf(e)) return become("working");
+      if (awaiting) doingOf(e).forEach(heard);
+      const tool = toolUseOf(e);
+      if (tool) {
+        const activity = awaiting ? activityOf(tool) : undefined;
+        if (activity) heard(activity);
+        return become("working");
+      }
       if (up.door && isSaying(e, up.door.address)) {
         return forward(`note: ${textOf(e)}`, Scheduling.SILENT);
       }
@@ -470,6 +504,7 @@ if (!noLiquen) {
       if (up.door && isReply(e, up.door.address)) {
         concluded = true;
         awaiting = false;
+        news = [];
         return forward(`result: ${textOf(e)}`, Scheduling.WHEN_IDLE);
       }
       const error = errorOf(e);
@@ -552,6 +587,10 @@ function update() {
   lastTalk = now; // the next one after another quiet stretch, whether the voice speaks or not
   const s = Math.round((now - busySince) / 1000);
   const silent = Math.round((now - lastSign) / 1000);
+  const since = news.length > 0
+    ? `. Since the last update it: ${news.join("; ")}`
+    : ". Nothing new since the last update";
+  news = [];
   forward(
     // "no result yet": run log/2026-09-26T11-40-42 had the voice announce the publish done
     // on an update, 40 s before the result came
@@ -560,7 +599,7 @@ function update() {
         "be stuck. No result yet: nothing is done"
       : `update: still ${
         state === "idle" ? "busy" : state
-      }, ${s} s in, no result yet: nothing is done`,
+      }, ${s} s in, no result yet: nothing is done${since}`,
     Scheduling.WHEN_IDLE,
   );
 }
