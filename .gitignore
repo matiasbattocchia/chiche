@@ -12,6 +12,7 @@ data/system/*
 !data/system/instructions
 !data/system/tools
 !data/system/skills/
+data/organization/.playwright-cli/
 data/agents/*/*
 !data/agents/*/instructions/
 !data/agents/*/skills/
