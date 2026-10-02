@@ -28,7 +28,7 @@ page that breaks breaks in front of the user, so catch it before they do.
 | Source | Catches | How |
 |---|---|---|
 | Type check | type errors, wrong APIs | `deno run -A npm:typescript/tsc --noEmit` in the project |
-| Lint | likely bugs, unused code | `deno lint` in the project |
+| Lint | likely bugs, unused code | `deno lint src` in the project |
 | Build | imports and bundling the dev server never reached | `deno task build` in the project |
 | Dev server | files that won't transform, missing imports, reloads | `vite.log` in the project |
 | Browser console | exceptions, errors, warnings | `.playwright-cli/console-*.log` |
