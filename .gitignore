@@ -13,6 +13,8 @@ data/system/*
 !data/system/tools
 !data/system/skills/
 data/organization/.playwright-cli/
+data/organization/projects/*
+!data/organization/projects/.gitkeep
 data/agents/*/*
 !data/agents/*/instructions/
 !data/agents/*/skills/
