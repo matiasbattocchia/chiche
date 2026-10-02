@@ -1,0 +1,4 @@
+{
+    "minimumDependencyAge": { "age": "P1D", "exclude": ["npm:littlejsengine"] },
+    "compilerOptions": { "checkJs": true, "strict": false, "noImplicitOverride": false }
+}
