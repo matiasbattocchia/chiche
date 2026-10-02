@@ -15,8 +15,10 @@ says what the agent's output means, without code.
 
 **Web projects** live in `data/organization/projects/<name>/`, served by Vite through Deno, and
 shown with `playwright-cli` in one browser window the user watches too.
+A game is such a project made with LittleJS, from what `data/organization/littlejs/` holds:
+its skills, starter examples and templates.
 
 `data/system` links to `../liquen`'s seed, except `skills`, an empty folder so liquen seeds no
-skills. `deprecated/` holds the old game design: don't read or reuse it.
+skills.
 
 Run it with `deno task chiche`.
