@@ -180,6 +180,16 @@ export function isSaying(e: DoorEvent, address: string): boolean {
   return spoken(e, address) && e.payload?.stop_reason !== "end_turn";
 }
 
+/**
+ * The summary of the coding agent's thinking in its mind's room, one per step that thought:
+ * both of liquen's transports ask the model for a summary, never the full reasoning.
+ */
+export function thoughtOf(e: DoorEvent, address: string): string | undefined {
+  if (e.type !== "thinking" || e.envelope?.conversation?.address !== address) return undefined;
+  const data = e.parts?.[0]?.data as { thinking?: string } | undefined;
+  return data?.thinking?.trim() || undefined;
+}
+
 /** The last event the coding agent had read when it wrote this: the requests it answers. */
 export function consumedOf(e: DoorEvent): string | undefined {
   return e.extra?.consumed;

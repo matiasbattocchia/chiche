@@ -17,7 +17,7 @@ import { TextLineStream } from "@std/streams";
 import { Audio, type Device, type Mixer, mixer, unmute, VOICE_RATE, watchMixer } from "./audio.ts";
 import { INPUT_TOOL, MODEL, Scheduling, Voice } from "./gemini.ts";
 import { keyCode, keyName, Keys } from "./keys.ts";
-import { clip, Door, errorOf, isReply, isSaying, textOf, toolUseOf } from "./liquen.ts";
+import { clip, Door, errorOf, isReply, isSaying, textOf, thoughtOf, toolUseOf } from "./liquen.ts";
 import { Log } from "./log.ts";
 import { BOLD, DIM, GREEN, Meter, RED, RESET, Terminal, YELLOW } from "./term.ts";
 
@@ -349,8 +349,9 @@ let channel: string | undefined;
 /**
  * The coding agent as the door shows it: idle, or busy and either thinking (the model generates:
  * deltas arrive) or working (its tools run: from a step's first tool use to the next delta).
- * The voice is told each change of state, silently: the word alone. What the agent thinks and
- * which commands it runs are not sent; only what it says is, as notes and results.
+ * The voice is told each change of state, silently: the word alone. The commands the agent runs
+ * are not sent; the summary of its thinking is, as thoughts, and what it says, as notes and
+ * results.
  */
 let state: "idle" | "thinking" | "working" = "idle";
 /** When the coding agent went busy on an input, for the updates. */
@@ -438,6 +439,8 @@ if (!noLiquen) {
     trace: (d, m) => log.door(d, m),
     event(e) {
       if (toolUseOf(e)) return become("working");
+      const thought = up.door && thoughtOf(e, up.door.address);
+      if (thought) return forward(`thought: ${thought}`, Scheduling.SILENT);
       if (up.door && isSaying(e, up.door.address)) {
         return forward(`note: ${textOf(e)}`, Scheduling.SILENT);
       }
