@@ -11,8 +11,14 @@
   addEventListener("click", (e) => log("click", name(e.target)), true);
   addEventListener("change", (e) => log("change", name(e.target), e.target.value ?? ""), true);
   addEventListener("submit", (e) => log("submit", name(e.target)), true);
+  // every key by its code (Space, KeyW, ArrowUp), the names a game reads, once per press:
+  // what is typed into a field shows as its change, and a held key does not repeat
+  const typing = (el) =>
+    el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ||
+    (el instanceof HTMLElement && el.isContentEditable);
   addEventListener("keydown", (e) => {
-    if (e.key.length > 1) log("key", e.key, name(e.target));
+    if (e.repeat || (typing(e.target) && e.key.length === 1)) return;
+    log("key", e.code || e.key, name(e.target));
   }, true);
   addEventListener("popstate", () => log("back/forward", location.href));
   addEventListener("hashchange", () => log("hash", location.href));
