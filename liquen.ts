@@ -104,7 +104,7 @@ export class Door {
     }
   }
 
-  /** The builder's conversation: `<session>@<user>`. */
+  /** The coding agent's conversation: `<session>@<user>`. */
   get address() {
     return `${this.session}@${this.user}`;
   }
@@ -119,7 +119,7 @@ export class Door {
     return reply;
   }
 
-  /** A message from the principal to the builder's session → `{ok, id}`. */
+  /** A message from the principal to the coding agent's session → `{ok, id}`. */
   message(text: string): Promise<Reply> {
     return this.request({
       op: "message",
@@ -160,19 +160,19 @@ export function textOf(e: DoorEvent): string {
     .join(" ");
 }
 
-/** The builder's own words in its mind's room: not a silence, with text. */
+/** The coding agent's own words in its mind's room: not a silence, with text. */
 function spoken(e: DoorEvent, address: string): boolean {
   return e.type === "message" && e.payload?.turn_id !== undefined &&
     e.envelope?.conversation?.address === address && e.extra?.silence !== true && textOf(e) !== "";
 }
 
-/** The builder's reply: what it says as its turn ends. */
+/** The coding agent's reply: what it says as its turn ends. */
 export function isReply(e: DoorEvent, address: string): boolean {
   return spoken(e, address) && e.payload?.stop_reason === "end_turn";
 }
 
 /**
- * What the builder says between two steps of a turn ("Let me build contact sheets to
+ * What the coding agent says between two steps of a turn ("Let me build contact sheets to
  * actually see them"): a note on its way, not a reply. liquen sends it as a message like any
  * other; the missing `end_turn` tells them apart.
  */
@@ -180,12 +180,12 @@ export function isSaying(e: DoorEvent, address: string): boolean {
   return spoken(e, address) && e.payload?.stop_reason !== "end_turn";
 }
 
-/** The last event the builder had read when it wrote this: the requests it answers. */
+/** The last event the coding agent had read when it wrote this: the requests it answers. */
 export function consumedOf(e: DoorEvent): string | undefined {
   return e.extra?.consumed;
 }
 
-/** A tool call the builder made: its name and a clipped rendering of the input. */
+/** A tool call the coding agent made: its name and a clipped rendering of the input. */
 export function toolUseOf(e: DoorEvent): { name: string; input: string } | undefined {
   if (e.type !== "tool_use") return undefined;
   const data = e.parts?.[0]?.data as { name?: string; input?: unknown } | undefined;
@@ -203,54 +203,6 @@ function inputLine(input: unknown): string {
     if (typeof first === "string") return first;
   }
   return JSON.stringify(input ?? {});
-}
-
-/**
- * What the builder's thinking before a step says it is doing. Gemini's thinking comes as
- * summaries, each a `**Heading**` and a paragraph ("**Exploring Character Poses**\n\nI'm now
- * investigating character poses…"): each heading, with its paragraph's first sentence.
- * Thinking with no heading gives its last paragraph's first sentence.
- */
-export function doingOf(e: DoorEvent): string[] {
-  if (e.type !== "thinking") return [];
-  const data = e.parts?.[0]?.data as { thinking?: unknown } | undefined;
-  if (typeof data?.thinking !== "string") return [];
-  const paragraphs = data.thinking.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
-  const sentence = (p: string | undefined) =>
-    p ? clip(p.replace(/\s+/g, " ").match(/^.*?[.!?](\s|$)/)?.[0].trim() ?? p, 160) : "";
-  const doing: string[] = [];
-  paragraphs.forEach((p, i) => {
-    const heading = p.match(/^\*\*(.+?)\*\*$/)?.[1];
-    if (!heading) return;
-    const next = paragraphs[i + 1];
-    const words = next && !next.startsWith("**") ? sentence(next) : "";
-    doing.push(words ? `${heading} (${words})` : heading);
-  });
-  if (doing.length === 0 && paragraphs.length > 0) doing.push(sentence(paragraphs.at(-1)));
-  return doing.filter(Boolean);
-}
-
-/**
- * A tool call, as what the builder is doing with it in a few words, or nothing for the
- * calls that only look around (reading code, listing files). The `game` command's verbs
- * and the org's file helpers (aread, awrite, aedit) are what it builds with.
- */
-export function activityOf(tool: { name: string; input: string }): string | undefined {
-  const c = tool.input;
-  const search = c.match(/\bgame assets search\s+"?([^"|&;]+?)"?(\s+--|\s*$|\s*[|&;])/);
-  if (search) return `looked in the art library for "${search[1].trim()}"`;
-  if (/\bgame assets use\b/.test(c)) return "took pictures or sounds from the art library";
-  if (/\bgame new\b/.test(c)) return "started a new game from the template";
-  if (/\bgame test\b/.test(c)) return "played the game to try it";
-  if (/\baread\b\S*\s+\S+\.(png|jpe?g|webp)\b/.test(c)) return "looked at a screenshot of it";
-  if (/\bgame check\b/.test(c)) return "checked the code for mistakes";
-  if (/\bgame build\b/.test(c)) return "put the new version on the screen";
-  if (/\bgame publish\b/.test(c)) return "published it on the web";
-  if (/\bgame docs\b/.test(c)) return "read how Phaser does something";
-  if (/\b(awrite|aedit)\b|cat\s*<<|sed -i|>\s*\S+\.(ts|json|md)\b/.test(c)) {
-    return "wrote the game's code";
-  }
-  return undefined;
 }
 
 export function errorOf(e: DoorEvent): string | undefined {

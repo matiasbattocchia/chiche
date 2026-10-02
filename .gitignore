@@ -7,11 +7,11 @@ log/
 data/log/
 data/run/
 data/relay/
-data/system/
-data/organization/games/
-# the asset library's packs: `game assets import` fetches them again; CREDITS.md is tracked
-data/organization/assets/*/
-data/organization/assets/.sheets/
+# the harness's own words, read live from the checkout; no system skills
+data/system/*
+!data/system/instructions
+!data/system/tools
+!data/system/skills/
 data/agents/*/*
 !data/agents/*/instructions/
 !data/agents/*/skills/

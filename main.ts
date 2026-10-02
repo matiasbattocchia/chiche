@@ -1,14 +1,14 @@
 // main.ts — chiche: boot, wiring, the mic's gate, the meters, teardown.
 //
-// Boot: LANG → liquen (started here, or the one already running) → game serve (the kid's
-// window) → the mixer unmuted, pw-record → Gemini. Teardown, on Ctrl-C or SIGTERM: close
-// Gemini, stop the audio, close the door (so the hang-up isn't read as unexpected), `liquen
-// stop` and wait for it, stop game serve, close the logs. `--no-liquen` skips liquen, the door
-// and game serve: the voice alone, to test the audio; `input` calls get an error. `--say-hi`
+// Boot: LANG → liquen (started here, or the one already running) → the mixer unmuted,
+// pw-record → Gemini, with INSTRUCTIONS.md as its system instruction when there is one.
+// Teardown, on Ctrl-C or SIGTERM: close Gemini, stop the audio, close the door (so the hang-up
+// isn't read as unexpected), `liquen stop` and wait for it, close the logs. `--no-liquen` skips
+// liquen and the door: the voice alone, to test the audio; `input` calls get an error. `--say-hi`
 // has the voice take the first turn. `--vad` leaves the turns to the server's activity
 // detection: the gate still decides what is sent, and closing it sends silence. `--fresh`
 // starts a new voice session instead of resuming the last run's. `--session <name>` picks the
-// conversation (default `mind`): the builder's room behind the door (`liquen repl --session
+// conversation (default `mind`): the coding agent's room behind the door (`liquen repl --session
 // <name>` shows the same one) and the voice session resumed under that name.
 
 import { encodeHex } from "@std/encoding/hex";
@@ -17,23 +17,12 @@ import { TextLineStream } from "@std/streams";
 import { Audio, type Device, type Mixer, mixer, unmute, VOICE_RATE, watchMixer } from "./audio.ts";
 import { INPUT_TOOL, MODEL, Scheduling, Voice } from "./gemini.ts";
 import { keyCode, keyName, Keys } from "./keys.ts";
-import {
-  activityOf,
-  clip,
-  doingOf,
-  Door,
-  errorOf,
-  isReply,
-  isSaying,
-  textOf,
-  toolUseOf,
-} from "./liquen.ts";
+import { clip, Door, errorOf, isReply, isSaying, textOf, toolUseOf } from "./liquen.ts";
 import { Log } from "./log.ts";
 import { BOLD, DIM, GREEN, Meter, RED, RESET, Terminal, YELLOW } from "./term.ts";
 
 const ROOT = dirname(fromFileUrl(import.meta.url));
 const DATA = join(ROOT, "data");
-const GAME = join(DATA, "organization", "bin", "game");
 const LIQUEN_BOOT_MS = 20_000;
 /** The meters' refresh. */
 const STATUS_MS = 66;
@@ -77,22 +66,6 @@ function child(cmd: string[], cwd: string, onLine: (line: string) => void) {
   return p;
 }
 
-async function stopChild(p: Deno.ChildProcess | undefined, graceMs = 5000) {
-  if (!p) return;
-  try {
-    p.kill("SIGTERM");
-  } catch {
-    return;
-  }
-  const timer = setTimeout(() => {
-    try {
-      p.kill("SIGKILL");
-    } catch { /* gone */ }
-  }, graceMs);
-  await p.status.catch(() => {});
-  clearTimeout(timer);
-}
-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ── boot ────────────────────────────────────────────────────────────────────
@@ -106,10 +79,10 @@ if (!apiKey) {
 }
 const FLAGS = ["--no-liquen", "--say-hi", "--vad", "--fresh"];
 const args = [...Deno.args];
-/** --session <name>: the conversation, builder and voice alike; liquen's default is `mind`. */
+/** --session <name>: the conversation, coding agent and voice alike; liquen's default is `mind`. */
 const si = args.indexOf("--session");
 const sessionName = si >= 0 ? args.splice(si, 2)[1] ?? "" : "mind";
-/** --no-liquen: the voice alone, to test the audio. No builder, no game window. */
+/** --no-liquen: the voice alone, to test the audio. No coding agent. */
 const noLiquen = args.includes("--no-liquen");
 /** --say-hi: the voice takes the first turn. */
 const sayHi = args.includes("--say-hi");
@@ -153,9 +126,13 @@ if (pushKey !== undefined && pushKey === toggleKey) {
 }
 
 const log = await Log.open(ROOT);
-const instructions = (await Deno.readTextFile(join(ROOT, "INSTRUCTIONS.md"))).replaceAll(
-  "{{LANG}}",
-  language,
+/** INSTRUCTIONS.md, when there is one; else the voice has no system instruction. */
+const instructions = await Deno.readTextFile(join(ROOT, "INSTRUCTIONS.md")).then(
+  (t) => t.replaceAll("{{LANG}}", language),
+  (e) => {
+    if (e instanceof Deno.errors.NotFound) return undefined;
+    throw e;
+  },
 );
 
 // ── the voice's session, across runs ────────────────────────────────────────
@@ -224,7 +201,7 @@ function saveSession() {
 
 /**
  * The conversation's lines go on the timeline as `chat`: what was said, what the voice sent
- * the builder and what came back. When the server no longer has a session, their tail is
+ * the coding agent and what came back. When the server no longer has a session, their tail is
  * what the new one starts from.
  */
 function chat(text: string) {
@@ -276,7 +253,6 @@ async function logTail(): Promise<string | undefined> {
 /** What is up, in boot order; teardown may run before any of it exists. */
 const up: {
   liquen?: Deno.ChildProcess;
-  serve?: Deno.ChildProcess;
   door?: Door;
   mixer?: { stop(): void };
   audio?: Audio;
@@ -313,7 +289,6 @@ async function teardown(code = 0) {
     if (text) log.line("liquen", text);
     await up.liquen.status.catch(() => {});
   }
-  await stopChild(up.serve);
   log.close();
   term.unpin();
   Deno.exit(code);
@@ -329,7 +304,7 @@ if (vad) {
   log.line("boot", "--vad");
 }
 if (noLiquen) {
-  term.dim("--no-liquen: no builder, no game window");
+  term.dim("--no-liquen: no coding agent");
   log.line("boot", "--no-liquen");
 } else {
   const socket = Door.socket(DATA, user);
@@ -365,91 +340,65 @@ if (noLiquen) {
 
 /**
  * The channel to the voice: the newest `input` call, acknowledged at once and kept open.
- * Nothing maps what the builder sends to the call that caused it: the voice sends what it
- * likes, the builder answers when it likes, and every line goes through the newest call. An
- * older call closes, silently, when a newer one arrives (a function response needs a call id:
- * that is all the call is for).
+ * Nothing maps what the coding agent sends to the call that caused it: the voice sends what it
+ * likes, the coding agent answers when it likes, and every line goes through the newest call. An
+ * older call gets no more answers and is left open (a function response needs a call id: that
+ * is all the call is for).
  */
 let channel: string | undefined;
 /**
- * The builder as the door shows it: idle, or busy and either thinking (the model generates:
+ * The coding agent as the door shows it: idle, or busy and either thinking (the model generates:
  * deltas arrive) or working (its tools run: from a step's first tool use to the next delta).
- * The voice is told each change of state, silently. The thinking and the commands reach it
- * only inside an update, digested (`news`), never raw: in log/2026-09-26T03-24-21 the voice
- * sent the builder's own thinking back as new tasks.
+ * The voice is told each change of state, silently: the word alone. What the agent thinks and
+ * which commands it runs are not sent; only what it says is, as notes and results.
  */
 let state: "idle" | "thinking" | "working" = "idle";
-/** When the builder went busy on a wish, for the updates. */
+/** When the coding agent went busy on an input, for the updates. */
 let busySince: number | undefined;
-/** Whether the builder said something final since it went busy: a result, or an error. */
+/** Whether the coding agent said something final since it went busy: a result, or an error. */
 let concluded = false;
 /**
- * Whether a wish was sent and not yet answered. The door also goes busy with nothing sent:
+ * Whether an input was sent and not yet answered. The door also goes busy with nothing sent:
  * a checkpoint, in the gap after a turn (liquen DESIGN §5). That is housekeeping, not
- * work on a wish: no updates count from it, and its end is not a silence to report.
+ * work on an input: no updates count from it, and its end is not a silence to report.
  */
 let awaiting = false;
 /** The door's last status edge. */
 let doorBusy = false;
-/** The door hung up on its own: no builder until the next run. */
+/** The door hung up on its own: no coding agent until the next run. */
 let doorGone = false;
 /**
- * While the builder is busy and nobody has spoken for this long, an update goes as a
- * WHEN_IDLE answer, so the voice tells the child that both of them are still there.
+ * While the coding agent is busy and nobody has spoken for this long, an update goes as a
+ * WHEN_IDLE answer, so the voice tells the user that both of them are still there.
  */
 const UPDATE_QUIET_MS = 30_000;
 /** Last time anyone spoke: the mic opening or closing, the voice's audio, a turn completing. */
 let lastTalk = performance.now();
-/** The builder's last sign of life: a wish sent, or anything from the door since. */
-let lastSign = performance.now();
-/**
- * What the builder did since the last update, oldest first: its thinking's headings and the
- * few words each tool call is worth (`doingOf`, `activityOf`). An update carries them for the
- * voice to tell in the child's words; they never make it speak on their own. In
- * log/2026-09-29T22-52-58 the voice had only "still working" to say, and said it 30 times
- * in 31 updates, one sentence six times word for word.
- */
-let news: string[] = [];
-/** The most an update carries, the latest ones: a minute of steps is 5–15 of them. */
-const NEWS_MAX = 6;
-
-function heard(item: string) {
-  if (news.at(-1) === item) return;
-  news.push(item);
-  if (news.length > NEWS_MAX) news = news.slice(-NEWS_MAX);
-}
-/**
- * A busy builder silent this long may be stuck, and the update says so. Its steps came 2–10 s
- * apart in log/2026-09-26T22-58-04, where a model call refused and retried showed nothing at
- * all for 124 s and 132 s before its error arrived.
- */
-const STUCK_MS = 60_000;
 
 /**
- * What a builder error means for the work, as the voice hears it; the raw error is the
- * door's line in the log. A 429 is the builder's model refusing work: a daily quota used up
+ * What a coding agent error means for the work, as the voice hears it; the raw error is the
+ * door's line in the log. A 429 is the coding agent's model refusing work: a daily quota used up
  * ("limit: 20 requests per day on Free Tier", measured) refuses every try until the next
  * day, any other clears within minutes.
  */
 function trouble(error: string): string {
-  const stopped = "nothing more is being built, and nothing new is ready";
+  const stopped = "it is not working on anything now, and nothing new is coming";
   if (/per ?day/i.test(error)) {
-    return "error: the builder stopped: its model's quota for today is used up, so nothing " +
-      `more can be built today; ${stopped}`;
+    return "error: the coding agent stopped: its model's quota for today is used up, so it " +
+      `can't work again until tomorrow; ${stopped}`;
   }
   if (/\b429\b|RESOURCE_EXHAUSTED/.test(error)) {
-    return "error: the builder stopped: its model is refusing work for now (too many " +
+    return "error: the coding agent stopped: its model is refusing work for now (too many " +
       `requests); ${stopped}. Sent again in a few minutes, it may work`;
   }
-  return `error: the builder stopped on a failure (${clip(error, 200)}); ${stopped}`;
+  return `error: the coding agent stopped on a failure (${clip(error, 200)}); ${stopped}`;
 }
 
-/** The builder stopped on an error. */
+/** The coding agent stopped on an error. */
 function failed(error: string) {
   concluded = true;
   awaiting = false;
-  news = [];
-  term.dim(`builder error: ${clip(error.replaceAll("\n", " "), 200)}`);
+  term.dim(`agent error: ${clip(error.replaceAll("\n", " "), 200)}`);
   forward(trouble(error), Scheduling.WHEN_IDLE);
 }
 
@@ -476,7 +425,7 @@ function forward(output: string, scheduling: Scheduling, willContinue = true, qu
   if (!willContinue) channel = undefined;
 }
 
-/** The builder changed state; the voice hears of it once, silently. */
+/** The coding agent changed state; the voice hears of it once, silently. */
 function become(next: typeof state) {
   if (state === next) return;
   state = next;
@@ -484,43 +433,32 @@ function become(next: typeof state) {
 }
 
 if (!noLiquen) {
-  // the builder's shell starts where the games are made: games/, kit/, template/ (the `game`
-  // command finds them itself, from wherever it runs)
+  // the coding agent's shell starts in the org's folder
   up.door = await Door.connect(DATA, user, sessionName, join(DATA, "organization"), {
     trace: (d, m) => log.door(d, m),
     event(e) {
-      lastSign = performance.now();
-      if (awaiting) doingOf(e).forEach(heard);
-      const tool = toolUseOf(e);
-      if (tool) {
-        const activity = awaiting ? activityOf(tool) : undefined;
-        if (activity) heard(activity);
-        return become("working");
-      }
+      if (toolUseOf(e)) return become("working");
       if (up.door && isSaying(e, up.door.address)) {
         return forward(`note: ${textOf(e)}`, Scheduling.SILENT);
       }
-      // that a result leaves the builder waiting is the tool's description, and INSTRUCTIONS.md's
       if (up.door && isReply(e, up.door.address)) {
         concluded = true;
         awaiting = false;
-        news = [];
         return forward(`result: ${textOf(e)}`, Scheduling.WHEN_IDLE);
       }
       const error = errorOf(e);
       if (error) return failed(error);
     },
     delta(d) {
-      lastSign = performance.now();
       if (d.kind === "error" && d.text) return failed(d.text);
       if (d.kind === "thinking" || d.kind === "text") become("thinking");
     },
     // the door's turn edges; a turn that ended with no result and no error (a silence) is
-    // told as one, or the voice goes on telling the child that work is under way
+    // told as one, or the voice goes on telling the user that work is under way
     status(s) {
       doorBusy = s.status === "busy";
       if (s.status === "busy") {
-        if (!awaiting) return; // housekeeping (a checkpoint): nothing of the child's runs
+        if (!awaiting) return; // housekeeping (a checkpoint): nothing of the user's runs
         busySince ??= performance.now();
         concluded = false;
         return;
@@ -529,14 +467,14 @@ if (!noLiquen) {
       const quiet = state !== "idle" && !concluded;
       become("idle");
       if (quiet) {
-        forward("idle: the builder stopped with nothing to say", Scheduling.WHEN_IDLE);
+        forward("idle: the coding agent stopped with nothing to say", Scheduling.WHEN_IDLE);
       }
     },
     hangup(expected) {
       if (expected || tearingDown) return;
       term.error("the door hung up");
       doorGone = true;
-      forward("error: the builder went away", Scheduling.WHEN_IDLE, false);
+      forward("error: the coding agent went away", Scheduling.WHEN_IDLE, false);
     },
   });
 }
@@ -549,18 +487,17 @@ async function input(callId: string, text: string) {
   chat(`input: ${text}`);
   const r = up.door
     ? await up.door.message(text)
-    : { ok: false, id: undefined, error: "the builder is off (chiche runs with --no-liquen)" };
+    : { ok: false, id: undefined, error: "the coding agent is off (chiche runs with --no-liquen)" };
   if (channel !== callId) return; // cancelled or superseded meanwhile
   // once the voice has spoken this turn, WHEN_IDLE would have it speak again once it's idle
   // (measured: a second answer 0.44 s after the first ended); before it has, WHEN_IDLE is what
   // makes it speak at all (measured: a turn that was only the call, and the user's run
-  // log/2026-09-25T17-45-59, where a SILENT "sent" left the child with nothing)
+  // log/2026-09-25T17-45-59, where a SILENT "sent" left the user with nothing)
   if (r.ok && typeof r.id === "string") {
     term.dim(`sent (${r.id.slice(-6)})`);
     awaiting = true;
-    lastSign = performance.now();
     // sent into a checkpoint: the door is busy already and shows no new edge when the
-    // wish's turn starts after it, so the wait counts from here
+    // input's turn starts after it, so the wait counts from here
     if (doorBusy) {
       busySince ??= performance.now();
       concluded = false;
@@ -577,7 +514,10 @@ async function input(callId: string, text: string) {
   }
 }
 
-/** An update while the builder is busy, when nobody has spoken for a while (UPDATE_QUIET_MS). */
+/**
+ * An update while the coding agent is busy, when nobody has spoken for a while
+ * (UPDATE_QUIET_MS).
+ */
 function update() {
   const now = performance.now();
   if (
@@ -586,37 +526,17 @@ function update() {
   ) return;
   lastTalk = now; // the next one after another quiet stretch, whether the voice speaks or not
   const s = Math.round((now - busySince) / 1000);
-  const silent = Math.round((now - lastSign) / 1000);
-  const since = news.length > 0
-    ? `. Since the last update it: ${news.join("; ")}`
-    : ". Nothing new since the last update";
-  news = [];
   forward(
-    // "no result yet": run log/2026-09-26T11-40-42 had the voice announce the publish done
-    // on an update, 40 s before the result came
-    now - lastSign > STUCK_MS
-      ? `update: still busy, ${s} s in, but nothing from the builder for ${silent} s: it may ` +
-        "be stuck. No result yet: nothing is done"
-      : `update: still ${
-        state === "idle" ? "busy" : state
-      }, ${s} s in, no result yet: nothing is done${since}`,
+    `update: still ${state === "idle" ? "busy" : state}, ${s} s in`,
     Scheduling.WHEN_IDLE,
   );
 }
 
-// 3. the kid's window
-if (!noLiquen) {
-  up.serve = child([GAME, "serve"], ROOT, (l) => {
-    log.line("game", l);
-    term.dim(`game: ${l}`);
-  });
-}
-
-// 4. audio. Two blocks stand between the child and the voice. The mixer's mute (mic and
+// 3. audio. Two blocks stand between the user and the voice. The mixer's mute (mic and
 // speakers) is outside chiche: it clears both at boot, the one thing it does to them, and then
 // only shows them. chiche's gate is the other: closed at boot, it follows the last key used
 // (push to talk down opens it and up closes it, the toggle flips it), and its opening and
-// closing are the child's turn edges (activityStart / End).
+// closing are the user's turn edges (activityStart / End).
 const wasMuted = await unmute();
 let mix: Mixer = await mixer();
 const label = (d: Device) => d.description ? `${d.name} (${d.description})` : d.name;
@@ -667,7 +587,7 @@ let closing:
 const TAIL_WAIT_MS = 300;
 /**
  * A push-to-talk turn's end waits this long after its tail is sent, and a press before then
- * goes on with the same turn: a child lets go and goes on. In log/2026-09-26T20-26-58 and
+ * goes on with the same turn: a user lets go and goes on. In log/2026-09-26T20-26-58 and
  * 22-58-04, of the 20 presses that came after a release and before the voice's answer, 15
  * came within 0.5 s of it, none between 0.5 and 1 s, and 5 at 1.0–1.5 s, as the answer was
  * due (a turn's end to the voice's first audio: median 1.45 s, half of 38 in 1.35–1.8 s).
@@ -686,7 +606,7 @@ let silence: { since: number; sent: number } | undefined;
 const SILENCE_MAX_MS = 10_000;
 /** Chunks sent since the mic last opened. */
 let sent = 0;
-/** When the child's turn (or the say-hi kick) ended with no answer yet. */
+/** When the user's turn (or the say-hi kick) ended with no answer yet. */
 let waitingSince: number | undefined;
 /** The voice's answer: under way (between its first content and turnComplete), and its audio. */
 let answering = false;
@@ -873,12 +793,12 @@ function status() {
       " ".repeat(10)
     } │ ${doing} ← ${received} chunks ${(receivedMs / 1000).toFixed(1)} s`,
   ];
-  // the builder's state, here rather than a line per change: it flips between thinking and
+  // the coding agent's state, here rather than a line per change: it flips between thinking and
   // working at every step
   if (!noLiquen) {
     const busy = busySince === undefined ? "" : ` ${Math.round((now - busySince) / 1000)} s`;
     rows.push(
-      `builder ${sessionName} │ ${
+      `agent ${sessionName} │ ${
         doorGone
           ? `${RED}gone${RESET}`
           : state === "idle"
@@ -903,7 +823,7 @@ async function endSession() {
   if (!v?.connected) return saveSession();
   if (channel) {
     forward(
-      "stopped: chiche was closed; if the builder was working, ask again next time",
+      "stopped: chiche was closed; if the coding agent was working, ask again next time",
       Scheduling.SILENT,
       false,
     );
@@ -928,8 +848,8 @@ async function sendTail() {
   if (!tail || !up.voice) return;
   up.voice.context(
     "(Not a turn, nothing to answer: this conversation's earlier voice session can't be " +
-      "resumed, so here is the end of its log. 🧒 is your client, 🗣️ is you, `input:` " +
-      "what you sent the builder, and the other lines what it sent back.)\n\n" + tail,
+      "resumed, so here is the end of its log. 🧒 is the user, 🗣️ is you, `input:` " +
+      "what you sent the coding agent, and the other lines what it sent back.)\n\n" + tail,
   );
   const n = tail.split("\n").length;
   term.dim(`the voice session was lost; it gets the last ${n} lines of the log`);

@@ -73,7 +73,8 @@ export interface VoiceOptions {
   apiKey: string;
   /** BCP-47, e.g. es-AR. */
   language: string;
-  systemInstruction: string;
+  /** Absent: the session has none. */
+  systemInstruction?: string;
   /**
    * The server's automatic activity detection takes the turns; `activityStart`/`activityEnd` do
    * nothing (the signals "can only be sent if automatic activity detection is disabled").
@@ -90,18 +91,16 @@ export interface VoiceOptions {
 
 export const INPUT_TOOL = {
   name: "input",
-  description: "Send work to the builder. The call is acknowledged at once and stays open as " +
-    "the channel for what the builder sends: whether it is thinking or working (for you to " +
-    "know, never to send back), its notes, and its result or its error. Either one means the " +
-    "builder is idle, waiting for you, until you send more. Nothing is done until a result " +
-    "arrives; after an error, nothing more is being built.",
+  description: "Send a message to the coding agent. It always takes input, even while the " +
+    "agent is working: messages queue up, and the agent picks them up at its next step " +
+    "without stopping what it is doing.",
   behavior: Behavior.NON_BLOCKING,
   parameters: {
     type: Type.OBJECT,
     properties: {
       text: {
         type: Type.STRING,
-        description: "The task, decision or question, as a message to the builder.",
+        description: "The task, decision or question, as a message to the coding agent.",
       },
     },
     required: ["text"],
@@ -155,7 +154,7 @@ export class Voice {
   }
 
   /**
-   * The mic opened: the child's turn starts. Automatic activity detection is off, so these two
+   * The mic opened: the user's turn starts. Automatic activity detection is off, so these two
    * are the only turn edges the server knows (the SDK: "the client must send activity
    * signals"). Interrupts the voice if it was speaking (ActivityHandling's default).
    */
@@ -236,7 +235,9 @@ export class Voice {
     const gen = ++this.#gen;
     const config = {
       responseModalities: [Modality.AUDIO],
-      systemInstruction: { parts: [{ text: this.#o.systemInstruction }] },
+      ...(this.#o.systemInstruction === undefined ? {} : {
+        systemInstruction: { parts: [{ text: this.#o.systemInstruction }] },
+      }),
       speechConfig: { languageCode: this.#o.language },
       inputAudioTranscription: {},
       outputAudioTranscription: {},
@@ -250,7 +251,11 @@ export class Voice {
       tools: [{ functionDeclarations: [INPUT_TOOL] }],
     };
     this.#o.on.trace("send", {
-      setup: { model: MODEL, ...config, systemInstruction: "<INSTRUCTIONS.md>" },
+      setup: {
+        model: MODEL,
+        ...config,
+        ...(config.systemInstruction ? { systemInstruction: "<INSTRUCTIONS.md>" } : {}),
+      },
     });
     // the SDK holds every server message until setupComplete and delivers them, setupComplete
     // first, before connect() returns: #message runs (and sets #ready) while `session` is still
