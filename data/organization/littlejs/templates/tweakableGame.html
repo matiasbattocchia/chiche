@@ -1,16 +1,38 @@
-<!DOCTYPE html><head>
-<title>LittleJS Tweakables Template</title>
-<meta charset="utf-8">
+<!DOCTYPE html>
+<head>
+  <title>LittleJS Tweakables Template</title>
+  <meta charset="utf-8">
 </head>
 <script type=module>
 import {
-    abs, cameraFit, cameraPos, debug, drawCircle, drawRect, drawRectGradient, drawTextScreen, engineInit,
-    getCameraSize, gravity, hsl, mainCanvasSize, min, mousePos, mouseWasPressed, rgb, setCameraScale,
-    setDebugTweakables, setGravity, sign, tweak, tweakButton, tweakDivider, tweakEngineDefaults, vec2,
-} from 'littlejsengine';
-import {
-    saveDataInit,
-} from './menus.js';
+  abs,
+  cameraFit,
+  cameraPos,
+  debug,
+  drawCircle,
+  drawRect,
+  drawRectGradient,
+  drawTextScreen,
+  engineInit,
+  getCameraSize,
+  gravity,
+  hsl,
+  mainCanvasSize,
+  min,
+  mousePos,
+  mouseWasPressed,
+  rgb,
+  setCameraScale,
+  setDebugTweakables,
+  setGravity,
+  sign,
+  tweak,
+  tweakButton,
+  tweakDivider,
+  tweakEngineDefaults,
+  vec2,
+} from "littlejsengine";
+import { saveDataInit } from "./menus.js";
 
 // engine settings
 setCameraScale(64);
@@ -29,127 +51,129 @@ setGravity(vec2(0, -.01));
 // game state — the tweakables are fields of one object, which tweak() is given:
 // a module's variables are not globals it could find by name
 const tweaks = {
-    ballRadius: 1.5,
-    ballSpeed: 1,
-    bounceCount: 5,
-    showTrail: true,
-    ballColor: hsl(.1, .8, .6),
-    ballPos: vec2(0, 5),
+  ballRadius: 1.5,
+  ballSpeed: 1,
+  bounceCount: 5,
+  showTrail: true,
+  ballColor: hsl(.1, .8, .6),
+  ballPos: vec2(0, 5),
 };
 let ballVel = vec2(0, 0);
 let trail = [];
 
 ///////////////////////////////////////////////////////////////////////////////
-async function gameInit()
-{
-    saveDataInit('LittleJS Tweakable Demo');
+async function gameInit() {
+  saveDataInit("LittleJS Tweakable Demo");
 
-    // show the panel from the start (debug builds only; 9 toggles it while the
-    // debug overlay is open)
-    setDebugTweakables(true);
+  // show the panel from the start (debug builds only; 9 toggles it while the
+  // debug overlay is open)
+  setDebugTweakables(true);
 
-    // add values at the end of gameInit, after they are set. the type comes
-    // from the value: number, boolean, Color, Vector2 or Vector3
-    tweakDivider('Ball');
-    tweak('ballRadius', {object: tweaks});                             // no range -> number input only
-    tweak('ballSpeed', {object: tweaks, min: 0, max: 10});             // slider
-    tweak('bounceCount', {object: tweaks, min: 1, max: 20, step: 1});  // integer slider
-    tweak('showTrail', {object: tweaks, label: 'Trail'});              // boolean, with a friendlier name
-    tweak('ballColor', {object: tweaks});                              // color picker + alpha
-    tweak('ballPos', {object: tweaks, min: -15, max: 15});             // vec2, a number per axis
-    tweakButton('Stop Ball', ()=> ballVel = vec2());                   // button that calls a function
+  // add values at the end of gameInit, after they are set. the type comes
+  // from the value: number, boolean, Color, Vector2 or Vector3
+  tweakDivider("Ball");
+  tweak("ballRadius", { object: tweaks }); // no range -> number input only
+  tweak("ballSpeed", { object: tweaks, min: 0, max: 10 }); // slider
+  tweak("bounceCount", { object: tweaks, min: 1, max: 20, step: 1 }); // integer slider
+  tweak("showTrail", { object: tweaks, label: "Trail" }); // boolean, with a friendlier name
+  tweak("ballColor", { object: tweaks }); // color picker + alpha
+  tweak("ballPos", { object: tweaks, min: -15, max: 15 }); // vec2, a number per axis
+  tweakButton("Stop Ball", () => ballVel = vec2()); // button that calls a function
 
-    // gravity, timeScale, cameraScale and soundVolume under an Engine divider
-    tweakEngineDefaults();
+  // gravity, timeScale, cameraScale and soundVolume under an Engine divider
+  tweakEngineDefaults();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-function gameUpdate()
-{
-    // simple physics: gravity + floor bounce + click to launch
-    ballVel = ballVel.add(gravity);
-    tweaks.ballPos = tweaks.ballPos.add(ballVel);
+function gameUpdate() {
+  // simple physics: gravity + floor bounce + click to launch
+  ballVel = ballVel.add(gravity);
+  tweaks.ballPos = tweaks.ballPos.add(ballVel);
 
-    const floorY = -8;
-    if (tweaks.ballPos.y - tweaks.ballRadius < floorY)
-    {
-        tweaks.ballPos = vec2(tweaks.ballPos.x, floorY + tweaks.ballRadius);
-        ballVel = vec2(ballVel.x, abs(ballVel.y) * .8);
-    }
+  const floorY = -8;
+  if (tweaks.ballPos.y - tweaks.ballRadius < floorY) {
+    tweaks.ballPos = vec2(tweaks.ballPos.x, floorY + tweaks.ballRadius);
+    ballVel = vec2(ballVel.x, abs(ballVel.y) * .8);
+  }
 
-    // walls
-    const wall = 14;
-    if (abs(tweaks.ballPos.x) + tweaks.ballRadius > wall)
-    {
-        tweaks.ballPos = vec2(sign(tweaks.ballPos.x) * (wall - tweaks.ballRadius), tweaks.ballPos.y);
-        ballVel = vec2(-ballVel.x * .8, ballVel.y);
-    }
+  // walls
+  const wall = 14;
+  if (abs(tweaks.ballPos.x) + tweaks.ballRadius > wall) {
+    tweaks.ballPos = vec2(
+      sign(tweaks.ballPos.x) * (wall - tweaks.ballRadius),
+      tweaks.ballPos.y,
+    );
+    ballVel = vec2(-ballVel.x * .8, ballVel.y);
+  }
 
-    // click to launch the ball toward the mouse
-    if (mouseWasPressed(0))
-    {
-        const dir = mousePos.subtract(tweaks.ballPos);
-        const len = dir.length() || 1;
-        const speed = min(tweaks.ballSpeed / len, .1);
-        ballVel = dir.scale(speed);
-    }
+  // click to launch the ball toward the mouse
+  if (mouseWasPressed(0)) {
+    const dir = mousePos.subtract(tweaks.ballPos);
+    const len = dir.length() || 1;
+    const speed = min(tweaks.ballSpeed / len, .1);
+    ballVel = dir.scale(speed);
+  }
 
-    // trail
-    if (tweaks.showTrail)
-    {
-        trail.push(tweaks.ballPos);
-        if (trail.length > tweaks.bounceCount * 8) trail.shift();
-    }
-    else
-    {
-        trail.length = 0;
-    }
+  // trail
+  if (tweaks.showTrail) {
+    trail.push(tweaks.ballPos);
+    if (trail.length > tweaks.bounceCount * 8) trail.shift();
+  } else {
+    trail.length = 0;
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-function gameUpdatePost()
-{
-    // setup camera and prepare for render
-    const viewSize = vec2(30,18)
-    cameraFit(vec2(0, 0), viewSize);
+function gameUpdatePost() {
+  // setup camera and prepare for render
+  const viewSize = vec2(30, 18);
+  cameraFit(vec2(0, 0), viewSize);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-function gameRender()
-{
-    drawRectGradient(cameraPos, getCameraSize(),
-        hsl(.6, .3, .15), hsl(.6, .3, .05));
+function gameRender() {
+  drawRectGradient(
+    cameraPos,
+    getCameraSize(),
+    hsl(.6, .3, .15),
+    hsl(.6, .3, .05),
+  );
 
-    // floor and walls
-    drawRect(vec2(0, -9), vec2(30, 2), hsl(0, 0, .2));
-    drawRect(vec2(-15, 0), vec2(2, 20), hsl(0, 0, .2));
-    drawRect(vec2(15, 0), vec2(2, 20), hsl(0, 0, .2));
+  // floor and walls
+  drawRect(vec2(0, -9), vec2(30, 2), hsl(0, 0, .2));
+  drawRect(vec2(-15, 0), vec2(2, 20), hsl(0, 0, .2));
+  drawRect(vec2(15, 0), vec2(2, 20), hsl(0, 0, .2));
 
-    // trail
-    if (tweaks.showTrail)
-    {
-        for (let i = 0; i < trail.length; ++i)
-        {
-            const a = i / trail.length;
-            drawCircle(trail[i], tweaks.ballRadius * a * .8,
-                rgb(tweaks.ballColor.r, tweaks.ballColor.g, tweaks.ballColor.b, a * .4));
-        }
+  // trail
+  if (tweaks.showTrail) {
+    for (let i = 0; i < trail.length; ++i) {
+      const a = i / trail.length;
+      drawCircle(
+        trail[i],
+        tweaks.ballRadius * a * .8,
+        rgb(tweaks.ballColor.r, tweaks.ballColor.g, tweaks.ballColor.b, a * .4),
+      );
     }
+  }
 
-    // ball
-    drawCircle(tweaks.ballPos, tweaks.ballRadius * 2, tweaks.ballColor);
+  // ball
+  drawCircle(tweaks.ballPos, tweaks.ballRadius * 2, tweaks.ballColor);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-function gameRenderPost()
-{
-    drawTextScreen(debug ? 'Tweak the panel values.  Click to launch the ball.' :
-        'The tweak panel is in debug builds only.  Click to launch the ball.',
-        vec2(mainCanvasSize.x/2, 30), 24,
-        hsl(0, 0, 1), 4, hsl(0, 0, 0));
+function gameRenderPost() {
+  drawTextScreen(
+    debug
+      ? "Tweak the panel values.  Click to launch the ball."
+      : "The tweak panel is in debug builds only.  Click to launch the ball.",
+    vec2(mainCanvasSize.x / 2, 30),
+    24,
+    hsl(0, 0, 1),
+    4,
+    hsl(0, 0, 0),
+  );
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 engineInit(gameInit, gameUpdate, gameUpdatePost, gameRender, gameRenderPost);
-
 </script>

@@ -1,7 +1,7 @@
 {
-    "name": "box2dgame",
-    "private": true,
-    "scripts": { "dev": "vite", "build": "vite build" },
-    "dependencies": { "littlejsengine": "^1.23.1" },
-    "devDependencies": { "vite": "^8.3.2" }
+  "name": "box2dgame",
+  "private": true,
+  "scripts": { "dev": "vite", "build": "vite build" },
+  "dependencies": { "littlejsengine": "^1.23.1" },
+  "devDependencies": { "vite": "^8.3.2" }
 }

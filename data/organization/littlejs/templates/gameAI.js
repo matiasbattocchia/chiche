@@ -47,72 +47,64 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Strategies
 
-
-export function randomAI(game, state)
-{
-    const player = game.getCurrentPlayer(state);
-    const moves = game.getLegalMoves(state, player);
-    if (!moves.length) return null;
-    return moves[Math.floor(Math.random() * moves.length)];
+export function randomAI(game, state) {
+  const player = game.getCurrentPlayer(state);
+  const moves = game.getLegalMoves(state, player);
+  if (!moves.length) return null;
+  return moves[Math.floor(Math.random() * moves.length)];
 }
 
-export function greedyAI(game, state)
-{
-    const player = game.getCurrentPlayer(state);
-    const moves = game.getLegalMoves(state, player);
-    if (!moves.length) return null;
-    let bestMove = moves[0];
-    let bestScore = -Infinity;
-    for (const move of moves)
-    {
-        const next = game.applyMove(state, move, player);
-        const score = game.evaluate(next, player);
-        if (score > bestScore)
-        {
-            bestScore = score;
-            bestMove = move;
-        }
+export function greedyAI(game, state) {
+  const player = game.getCurrentPlayer(state);
+  const moves = game.getLegalMoves(state, player);
+  if (!moves.length) return null;
+  let bestMove = moves[0];
+  let bestScore = -Infinity;
+  for (const move of moves) {
+    const next = game.applyMove(state, move, player);
+    const score = game.evaluate(next, player);
+    if (score > bestScore) {
+      bestScore = score;
+      bestMove = move;
     }
-    return bestMove;
+  }
+  return bestMove;
 }
 
-export function minimaxAI(game, state, depth)
-{
-    const player = game.getCurrentPlayer(state);
-    const moves = game.getLegalMoves(state, player);
-    if (!moves.length) return null;
-    let bestMove = moves[0];
-    let bestScore = -Infinity;
-    for (const move of moves)
-    {
-        const next = game.applyMove(state, move, player);
-        const score = minimaxValue(game, next, depth - 1, player);
-        if (score > bestScore)
-        {
-            bestScore = score;
-            bestMove = move;
-        }
+export function minimaxAI(game, state, depth) {
+  const player = game.getCurrentPlayer(state);
+  const moves = game.getLegalMoves(state, player);
+  if (!moves.length) return null;
+  let bestMove = moves[0];
+  let bestScore = -Infinity;
+  for (const move of moves) {
+    const next = game.applyMove(state, move, player);
+    const score = minimaxValue(game, next, depth - 1, player);
+    if (score > bestScore) {
+      bestScore = score;
+      bestMove = move;
     }
-    return bestMove;
+  }
+  return bestMove;
 }
 
-export function minimaxValue(game, state, depth, maxPlayer)
-{
-    if (depth === 0 || game.isTerminal(state))
-        return game.evaluate(state, maxPlayer);
-    const player = game.getCurrentPlayer(state);
-    const moves = game.getLegalMoves(state, player);
-    if (!moves.length)
-        return game.evaluate(state, maxPlayer);
-    const isMax = player === maxPlayer;
-    let best = isMax ? -Infinity : Infinity;
-    for (const move of moves)
-    {
-        const next = game.applyMove(state, move, player);
-        const value = minimaxValue(game, next, depth - 1, maxPlayer);
-        best = isMax ? Math.max(best, value) : Math.min(best, value);
-    }
-    return best;
+export function minimaxValue(game, state, depth, maxPlayer) {
+  if (depth === 0 || game.isTerminal(state)) {
+    return game.evaluate(state, maxPlayer);
+  }
+  const player = game.getCurrentPlayer(state);
+  const moves = game.getLegalMoves(state, player);
+  if (!moves.length) {
+    return game.evaluate(state, maxPlayer);
+  }
+  const isMax = player === maxPlayer;
+  let best = isMax ? -Infinity : Infinity;
+  for (const move of moves) {
+    const next = game.applyMove(state, move, player);
+    const value = minimaxValue(game, next, depth - 1, maxPlayer);
+    best = isMax ? Math.max(best, value) : Math.min(best, value);
+  }
+  return best;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -128,211 +120,269 @@ export function minimaxValue(game, state, depth, maxPlayer)
 // Thrown by the yielder to abort a search that has blown its time budget. The
 // partially-searched iteration is discarded and the best move from the last
 // fully-completed iteration is returned. Caught only inside alphaBetaAI.
-export const SEARCH_TIMEOUT = {searchTimeout: true};
+export const SEARCH_TIMEOUT = { searchTimeout: true };
 
 // Fisher-Yates in-place shuffle. Used to randomize root-move order when the
 // caller opts in (options.rootRandom) so equally-good moves are chosen at
 // random — gives game-to-game variety without weakening play.
-export function shuffleInPlace(arr)
-{
-    for (let i = arr.length - 1; i > 0; i--)
-    {
-        const j = Math.floor(Math.random() * (i + 1));
-        const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
-    }
-    return arr;
+export function shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = arr[i];
+    arr[i] = arr[j];
+    arr[j] = t;
+  }
+  return arr;
 }
 
-export async function alphaBetaAI(game, state, depth, options = {})
-{
-    const player = game.getCurrentPlayer(state);
-    if (!game.getLegalMoves(state, player).length) return null;
-    if (depth < 1) depth = 1; // clamp — depth 0 would skip the search loop entirely
+export async function alphaBetaAI(game, state, depth, options = {}) {
+  const player = game.getCurrentPlayer(state);
+  if (!game.getLegalMoves(state, player).length) return null;
+  if (depth < 1) depth = 1; // clamp — depth 0 would skip the search loop entirely
 
-    const yieldEveryMs = options.yieldEveryMs || 16;
-    const onProgress = options.onProgress || null;
-    // onRootProgress(rootMoveIndex, rootMovesTotal, currentDepth, maxDepth)
-    // fires after each root-move's subtree completes during every iterative-
-    // deepening iteration. Lets the consumer show fine-grained progress.
-    const onRootProgress = options.onRootProgress || null;
-    // Optional wall-clock budget (ms). When set, iterative deepening keeps going
-    // until the budget is spent, then returns the best move from the last fully-
-    // completed depth. Guarantees the AI always moves in bounded time regardless
-    // of position. 0/undefined = no budget (search the full requested depth).
-    const maxTimeMs = options.maxTimeMs || 0;
-    // Randomize root move order so equal-scored moves vary between games.
-    const rootRandom = !!options.rootRandom;
-    const searchStart = performance.now();
-    // Hard wall-clock deadline, armed from the start so even the first iteration
-    // (including its quiescence search) is bounded. When an iteration is aborted
-    // mid-flight, the root salvages the best fully-searched move so far, so we
-    // never return null. Infinity = no budget (search the full requested depth).
-    const deadline = maxTimeMs ? searchStart + maxTimeMs : Infinity;
-    let lastYieldTime = performance.now();
-    const yielder = async () => {
-        const now = performance.now();
-        if (now >= deadline) throw SEARCH_TIMEOUT;
-        if (now - lastYieldTime >= yieldEveryMs) {
-            await new Promise(r => setTimeout(r, 0));
-            lastYieldTime = performance.now();
-            if (performance.now() >= deadline) throw SEARCH_TIMEOUT;
-        }
-    };
-
-    // Transposition table — local to this search invocation.
-    const tt = new Map();
-
-    // killers[ply] = [move1, move2]
-    const killers = [];
-    for (let i = 0; i <= depth; i++) killers.push([null, null]);
-
-    let bestMove = null;
-
-    // Iterative deepening: d = 1, 2, … depth.
-    // The TT carries across iterations so each deeper pass benefits from
-    // the previous iteration's best-move ordering.
-    for (let d = 1; d <= depth; d++)
-    {
-        // Curry depth info into the root-progress closure so the consumer
-        // doesn't have to thread it through manually.
-        const rootCb = onRootProgress
-            ? (rootIdx, rootTotal) => onRootProgress(rootIdx, rootTotal, d, depth)
-            : null;
-        let result;
-        try {
-            result = await alphaBetaSearch(game, state, d, -Infinity, Infinity, player, 0, tt, killers, yielder, rootCb, rootRandom);
-        } catch (e) {
-            // The root salvages timeouts (returning a move with timedOut:true), so
-            // reaching here means we ran out of time before searching even one root
-            // move — keep the best move from the previous completed depth and stop.
-            if (e === SEARCH_TIMEOUT) break;
-            throw e;
-        }
-        if (result.move !== null)
-            bestMove = result.move;
-        if (onProgress) onProgress(d, depth);
-        // Yield unconditionally between iterations so the progress callback's UI update gets a chance to render.
-        await new Promise(r => setTimeout(r, 0));
-        lastYieldTime = performance.now();
-        // A time-truncated (partial) iteration: stop deepening — we already took its
-        // best-so-far move above. Also stop if the budget is spent.
-        if (result.timedOut) break;
-        if (maxTimeMs && performance.now() >= deadline) break;
+  const yieldEveryMs = options.yieldEveryMs || 16;
+  const onProgress = options.onProgress || null;
+  // onRootProgress(rootMoveIndex, rootMovesTotal, currentDepth, maxDepth)
+  // fires after each root-move's subtree completes during every iterative-
+  // deepening iteration. Lets the consumer show fine-grained progress.
+  const onRootProgress = options.onRootProgress || null;
+  // Optional wall-clock budget (ms). When set, iterative deepening keeps going
+  // until the budget is spent, then returns the best move from the last fully-
+  // completed depth. Guarantees the AI always moves in bounded time regardless
+  // of position. 0/undefined = no budget (search the full requested depth).
+  const maxTimeMs = options.maxTimeMs || 0;
+  // Randomize root move order so equal-scored moves vary between games.
+  const rootRandom = !!options.rootRandom;
+  const searchStart = performance.now();
+  // Hard wall-clock deadline, armed from the start so even the first iteration
+  // (including its quiescence search) is bounded. When an iteration is aborted
+  // mid-flight, the root salvages the best fully-searched move so far, so we
+  // never return null. Infinity = no budget (search the full requested depth).
+  const deadline = maxTimeMs ? searchStart + maxTimeMs : Infinity;
+  let lastYieldTime = performance.now();
+  const yielder = async () => {
+    const now = performance.now();
+    if (now >= deadline) throw SEARCH_TIMEOUT;
+    if (now - lastYieldTime >= yieldEveryMs) {
+      await new Promise((r) => setTimeout(r, 0));
+      lastYieldTime = performance.now();
+      if (performance.now() >= deadline) throw SEARCH_TIMEOUT;
     }
+  };
 
-    return bestMove;
+  // Transposition table — local to this search invocation.
+  const tt = new Map();
+
+  // killers[ply] = [move1, move2]
+  const killers = [];
+  for (let i = 0; i <= depth; i++) killers.push([null, null]);
+
+  let bestMove = null;
+
+  // Iterative deepening: d = 1, 2, … depth.
+  // The TT carries across iterations so each deeper pass benefits from
+  // the previous iteration's best-move ordering.
+  for (let d = 1; d <= depth; d++) {
+    // Curry depth info into the root-progress closure so the consumer
+    // doesn't have to thread it through manually.
+    const rootCb = onRootProgress
+      ? (rootIdx, rootTotal) => onRootProgress(rootIdx, rootTotal, d, depth)
+      : null;
+    let result;
+    try {
+      result = await alphaBetaSearch(
+        game,
+        state,
+        d,
+        -Infinity,
+        Infinity,
+        player,
+        0,
+        tt,
+        killers,
+        yielder,
+        rootCb,
+        rootRandom,
+      );
+    } catch (e) {
+      // The root salvages timeouts (returning a move with timedOut:true), so
+      // reaching here means we ran out of time before searching even one root
+      // move — keep the best move from the previous completed depth and stop.
+      if (e === SEARCH_TIMEOUT) break;
+      throw e;
+    }
+    if (result.move !== null) {
+      bestMove = result.move;
+    }
+    if (onProgress) onProgress(d, depth);
+    // Yield unconditionally between iterations so the progress callback's UI update gets a chance to render.
+    await new Promise((r) => setTimeout(r, 0));
+    lastYieldTime = performance.now();
+    // A time-truncated (partial) iteration: stop deepening — we already took its
+    // best-so-far move above. Also stop if the budget is spent.
+    if (result.timedOut) break;
+    if (maxTimeMs && performance.now() >= deadline) break;
+  }
+
+  return bestMove;
 }
 
 // alphaBetaSearch — recursive negamax-style alpha-beta with TT and killers.
 // Returns {score, move}. `onRootProgress` fires only at ply 0, after each
 // root move's subtree completes.
-export async function alphaBetaSearch(game, state, depth, alpha, beta, maxPlayer, ply, tt, killers, yielder, onRootProgress, rootRandom)
-{
-    // Capture alpha before any TT adjustment — required for correct flag.
-    const alphaOrig = alpha;
-    await yielder();
+export async function alphaBetaSearch(
+  game,
+  state,
+  depth,
+  alpha,
+  beta,
+  maxPlayer,
+  ply,
+  tt,
+  killers,
+  yielder,
+  onRootProgress,
+  rootRandom,
+) {
+  // Capture alpha before any TT adjustment — required for correct flag.
+  const alphaOrig = alpha;
+  await yielder();
 
-    // Transposition-table lookup. Hash includes board + side to move plus any
-    // optional state fields that affect the search subtree (chess castling
-    // rights, chess en passant target). JSON.stringify omits undefined fields,
-    // so games without these fields hash identically to before.
-    const hashKey = JSON.stringify({
-        b: state.board, p: state.currentPlayer,
-        c: state.castlingRights, e: state.enPassantTarget,
-    });
-    const ttEntry = tt.get(hashKey);
+  // Transposition-table lookup. Hash includes board + side to move plus any
+  // optional state fields that affect the search subtree (chess castling
+  // rights, chess en passant target). JSON.stringify omits undefined fields,
+  // so games without these fields hash identically to before.
+  const hashKey = JSON.stringify({
+    b: state.board,
+    p: state.currentPlayer,
+    c: state.castlingRights,
+    e: state.enPassantTarget,
+  });
+  const ttEntry = tt.get(hashKey);
 
-    if (ttEntry && ttEntry.depth >= depth)
-    {
-        if (ttEntry.flag === 'exact')
-            return {score: ttEntry.score, move: ttEntry.bestMove};
-        if (ttEntry.flag === 'lowerbound')
-            alpha = Math.max(alpha, ttEntry.score);
-        else /* upperbound */
-            beta = Math.min(beta, ttEntry.score);
-        if (alpha >= beta)
-            return {score: ttEntry.score, move: ttEntry.bestMove};
+  if (ttEntry && ttEntry.depth >= depth) {
+    if (ttEntry.flag === "exact") {
+      return { score: ttEntry.score, move: ttEntry.bestMove };
+    }
+    if (ttEntry.flag === "lowerbound") {
+      alpha = Math.max(alpha, ttEntry.score);
+    } /* upperbound */
+    else {
+      beta = Math.min(beta, ttEntry.score);
+    }
+    if (alpha >= beta) {
+      return { score: ttEntry.score, move: ttEntry.bestMove };
+    }
+  }
+
+  // Terminal / leaf node. If the adapter supports quiescence (provides
+  // getCaptureMoves), use it to resolve in-progress capture sequences past
+  // the depth limit. Otherwise return the static eval.
+  if (game.isTerminal(state)) {
+    return { score: game.evaluate(state, maxPlayer), move: null };
+  }
+  if (depth === 0) {
+    if (game.getCaptureMoves) {
+      return {
+        score: await quiescence(
+          game,
+          state,
+          alpha,
+          beta,
+          maxPlayer,
+          0,
+          yielder,
+        ),
+        move: null,
+      };
+    }
+    return { score: game.evaluate(state, maxPlayer), move: null };
+  }
+
+  const player = game.getCurrentPlayer(state);
+  const moves = game.getLegalMoves(state, player);
+  if (!moves.length) {
+    return { score: game.evaluate(state, maxPlayer), move: null };
+  }
+
+  // Randomize root move order (opt-in) so ties between equally-good moves are
+  // broken differently each game. Done before orderMoves so the TT/killer best
+  // moves still float to the front for pruning — only the tail (and thus tie
+  // resolution) is randomized; a uniquely-best move is unaffected.
+  if (ply === 0 && rootRandom) shuffleInPlace(moves);
+
+  // Move ordering: TT best-move first, then killers, then the rest.
+  orderMoves(moves, ttEntry, killers[ply]);
+
+  const isMax = player === maxPlayer;
+  let bestScore = isMax ? -Infinity : Infinity;
+  let bestMove = moves[0];
+
+  for (let i = 0; i < moves.length; i++) {
+    const move = moves[i];
+    const next = game.applyMove(state, move, player);
+    let childResult;
+    try {
+      childResult = await alphaBetaSearch(
+        game,
+        next,
+        depth - 1,
+        alpha,
+        beta,
+        maxPlayer,
+        ply + 1,
+        tt,
+        killers,
+        yielder,
+        null,
+        false,
+      );
+    } catch (e) {
+      // Out of time. At the root, salvage the best fully-searched move so far
+      // (bestMove defaults to moves[0], so it is always a legal move). Deeper
+      // nodes re-throw so the abort unwinds all the way up to the root.
+      if (e === SEARCH_TIMEOUT && ply === 0) {
+        return { score: bestScore, move: bestMove, timedOut: true };
+      }
+      throw e;
+    }
+    const score = childResult.score;
+
+    if (isMax) {
+      if (score > bestScore) {
+        bestScore = score;
+        bestMove = move;
+      }
+      alpha = Math.max(alpha, bestScore);
+    } else {
+      if (score < bestScore) {
+        bestScore = score;
+        bestMove = move;
+      }
+      beta = Math.min(beta, bestScore);
     }
 
-    // Terminal / leaf node. If the adapter supports quiescence (provides
-    // getCaptureMoves), use it to resolve in-progress capture sequences past
-    // the depth limit. Otherwise return the static eval.
-    if (game.isTerminal(state))
-        return {score: game.evaluate(state, maxPlayer), move: null};
-    if (depth === 0) {
-        if (game.getCaptureMoves)
-            return {score: await quiescence(game, state, alpha, beta, maxPlayer, 0, yielder), move: null};
-        return {score: game.evaluate(state, maxPlayer), move: null};
+    // Notify the consumer after this root move's subtree completes so they
+    // can show fine-grained progress within the current iteration.
+    if (ply === 0 && onRootProgress) {
+      onRootProgress(i + 1, moves.length);
     }
 
-    const player = game.getCurrentPlayer(state);
-    const moves = game.getLegalMoves(state, player);
-    if (!moves.length)
-        return {score: game.evaluate(state, maxPlayer), move: null};
-
-    // Randomize root move order (opt-in) so ties between equally-good moves are
-    // broken differently each game. Done before orderMoves so the TT/killer best
-    // moves still float to the front for pruning — only the tail (and thus tie
-    // resolution) is randomized; a uniquely-best move is unaffected.
-    if (ply === 0 && rootRandom) shuffleInPlace(moves);
-
-    // Move ordering: TT best-move first, then killers, then the rest.
-    orderMoves(moves, ttEntry, killers[ply]);
-
-    const isMax = player === maxPlayer;
-    let bestScore = isMax ? -Infinity : Infinity;
-    let bestMove = moves[0];
-
-    for (let i = 0; i < moves.length; i++)
-    {
-        const move = moves[i];
-        const next = game.applyMove(state, move, player);
-        let childResult;
-        try {
-            childResult = await alphaBetaSearch(
-                game, next, depth - 1, alpha, beta, maxPlayer, ply + 1, tt, killers, yielder, null, false);
-        } catch (e) {
-            // Out of time. At the root, salvage the best fully-searched move so far
-            // (bestMove defaults to moves[0], so it is always a legal move). Deeper
-            // nodes re-throw so the abort unwinds all the way up to the root.
-            if (e === SEARCH_TIMEOUT && ply === 0)
-                return {score: bestScore, move: bestMove, timedOut: true};
-            throw e;
-        }
-        const score = childResult.score;
-
-        if (isMax)
-        {
-            if (score > bestScore) { bestScore = score; bestMove = move; }
-            alpha = Math.max(alpha, bestScore);
-        }
-        else
-        {
-            if (score < bestScore) { bestScore = score; bestMove = move; }
-            beta = Math.min(beta, bestScore);
-        }
-
-        // Notify the consumer after this root move's subtree completes so they
-        // can show fine-grained progress within the current iteration.
-        if (ply === 0 && onRootProgress)
-            onRootProgress(i + 1, moves.length);
-
-        if (beta <= alpha)
-        {
-            // Beta cutoff — record this as a killer move at this ply.
-            recordKiller(killers[ply], move);
-            break;
-        }
+    if (beta <= alpha) {
+      // Beta cutoff — record this as a killer move at this ply.
+      recordKiller(killers[ply], move);
+      break;
     }
+  }
 
-    // Store result in transposition table.
-    let flag;
-    if (bestScore <= alphaOrig)  flag = 'upperbound';
-    else if (bestScore >= beta)  flag = 'lowerbound';
-    else                         flag = 'exact';
-    tt.set(hashKey, {depth, score: bestScore, flag, bestMove});
+  // Store result in transposition table.
+  let flag;
+  if (bestScore <= alphaOrig) flag = "upperbound";
+  else if (bestScore >= beta) flag = "lowerbound";
+  else flag = "exact";
+  tt.set(hashKey, { depth, score: bestScore, flag, bestMove });
 
-    return {score: bestScore, move: bestMove};
+  return { score: bestScore, move: bestMove };
 }
 
 // quiescence — extend search past depth limit using capture moves only,
@@ -340,40 +390,55 @@ export async function alphaBetaSearch(game, state, depth, alpha, beta, maxPlayer
 // Hard-capped at QUIESCENCE_MAX_PLY to prevent pathological infinite chains.
 export const QUIESCENCE_MAX_PLY = 8;
 
-export async function quiescence(game, state, alpha, beta, maxPlayer, qPly, yielder)
-{
-    await yielder();
-    const standPat = game.evaluate(state, maxPlayer);
-    const player = game.getCurrentPlayer(state);
-    const isMax = player === maxPlayer;
+export async function quiescence(
+  game,
+  state,
+  alpha,
+  beta,
+  maxPlayer,
+  qPly,
+  yielder,
+) {
+  await yielder();
+  const standPat = game.evaluate(state, maxPlayer);
+  const player = game.getCurrentPlayer(state);
+  const isMax = player === maxPlayer;
 
-    // Stand-pat: if not capturing already beats the current alpha (or fails beta),
-    // we can stop here. The current player can always "choose not to capture."
+  // Stand-pat: if not capturing already beats the current alpha (or fails beta),
+  // we can stop here. The current player can always "choose not to capture."
+  if (isMax) {
+    if (standPat >= beta) return beta;
+    if (standPat > alpha) alpha = standPat;
+  } else {
+    if (standPat <= alpha) return alpha;
+    if (standPat < beta) beta = standPat;
+  }
+
+  if (qPly >= QUIESCENCE_MAX_PLY) return standPat;
+
+  const captures = game.getCaptureMoves(state, player);
+  if (!captures.length) return standPat;
+
+  for (const move of captures) {
+    const next = game.applyMove(state, move, player);
+    const score = await quiescence(
+      game,
+      next,
+      alpha,
+      beta,
+      maxPlayer,
+      qPly + 1,
+      yielder,
+    );
     if (isMax) {
-        if (standPat >= beta) return beta;
-        if (standPat > alpha) alpha = standPat;
+      if (score >= beta) return beta;
+      if (score > alpha) alpha = score;
     } else {
-        if (standPat <= alpha) return alpha;
-        if (standPat < beta) beta = standPat;
+      if (score <= alpha) return alpha;
+      if (score < beta) beta = score;
     }
-
-    if (qPly >= QUIESCENCE_MAX_PLY) return standPat;
-
-    const captures = game.getCaptureMoves(state, player);
-    if (!captures.length) return standPat;
-
-    for (const move of captures) {
-        const next = game.applyMove(state, move, player);
-        const score = await quiescence(game, next, alpha, beta, maxPlayer, qPly + 1, yielder);
-        if (isMax) {
-            if (score >= beta) return beta;
-            if (score > alpha) alpha = score;
-        } else {
-            if (score <= alpha) return alpha;
-            if (score < beta) beta = score;
-        }
-    }
-    return isMax ? alpha : beta;
+  }
+  return isMax ? alpha : beta;
 }
 
 // Move equality via JSON.stringify — generic across all current games'
@@ -381,38 +446,32 @@ export async function quiescence(game, state, alpha, beta, maxPlayer, qPly, yiel
 export const movesEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // orderMoves — in-place reorder: TT best-move to front, then killer moves.
-export function orderMoves(moves, ttEntry, killerPair)
-{
-    // Build hint list: [ttBestMove, killer0, killer1] in that priority order.
-    // We insert them in reverse so that after all insertions the highest-
-    // priority hint sits at index 0.
-    const hints = [];
-    if (ttEntry && ttEntry.bestMove) hints.push(ttEntry.bestMove);
-    if (killerPair[0]) hints.push(killerPair[0]);
-    if (killerPair[1]) hints.push(killerPair[1]);
+export function orderMoves(moves, ttEntry, killerPair) {
+  // Build hint list: [ttBestMove, killer0, killer1] in that priority order.
+  // We insert them in reverse so that after all insertions the highest-
+  // priority hint sits at index 0.
+  const hints = [];
+  if (ttEntry && ttEntry.bestMove) hints.push(ttEntry.bestMove);
+  if (killerPair[0]) hints.push(killerPair[0]);
+  if (killerPair[1]) hints.push(killerPair[1]);
 
-    for (let i = hints.length - 1; i >= 0; i--)
-    {
-        const h = hints[i];
-        for (let j = 0; j < moves.length; j++)
-        {
-            if (movesEqual(moves[j], h))
-            {
-                if (j !== 0)
-                {
-                    const m = moves.splice(j, 1)[0];
-                    moves.unshift(m);
-                }
-                break;
-            }
+  for (let i = hints.length - 1; i >= 0; i--) {
+    const h = hints[i];
+    for (let j = 0; j < moves.length; j++) {
+      if (movesEqual(moves[j], h)) {
+        if (j !== 0) {
+          const m = moves.splice(j, 1)[0];
+          moves.unshift(m);
         }
+        break;
+      }
     }
+  }
 }
 
 // recordKiller — update a ply's two killer slots with a new cutoff move.
-export function recordKiller(killerPair, move)
-{
-    if (killerPair[0] && movesEqual(killerPair[0], move)) return;
-    killerPair[1] = killerPair[0];
-    killerPair[0] = move;
+export function recordKiller(killerPair, move) {
+  if (killerPair[0] && movesEqual(killerPair[0], move)) return;
+  killerPair[1] = killerPair[0];
+  killerPair[0] = move;
 }

@@ -16,4 +16,4 @@ It is ~2300 lines / 180KB — do **NOT** read the whole file into context. Grep 
 - Renamed or removed symbols: check the `## Deprecated` section at the end.
 - If a symbol is NOT in the reference, verify against the engine build itself before concluding it exists: grep the project's `node_modules/littlejsengine/dist/littlejs.js` for it, or its typings, `littlejs.d.ts`, in the same folder. Trust the engine source over memory.
 
-For engine *conventions and pitfalls* (argument-order traps, per-frame vs per-second units, naming rules), use the `littlejs/littlejs-conventions` skill instead — this skill is only for exact API lookup.
+For engine _conventions and pitfalls_ (argument-order traps, per-frame vs per-second units, naming rules), use the `littlejs/littlejs-conventions` skill instead — this skill is only for exact API lookup.

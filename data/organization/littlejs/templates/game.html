@@ -1,16 +1,34 @@
-<!DOCTYPE html><head>
-<title>LittleJS AI Starter Project</title>
-<meta charset="utf-8">
+<!DOCTYPE html>
+<head>
+  <title>LittleJS AI Starter Project</title>
+  <meta charset="utf-8">
 </head>
 <script type=module>
 import {
-    BLACK, BLUE, RED, WHITE, YELLOW, cameraPos, drawLine, drawRect, drawRectGradient, drawText,
-    drawTextScreen, drawTile, engineInit, getCameraSize, hsl, mainCanvasSize, mousePos, setCameraPos,
-    setCameraScale, setCanvasFixedSize, setGravity, vec2,
-} from 'littlejsengine';
-import {
-    initDefaultAtlas,
-} from './textureGenerator.js';
+  BLACK,
+  BLUE,
+  cameraPos,
+  drawLine,
+  drawRect,
+  drawRectGradient,
+  drawText,
+  drawTextScreen,
+  drawTile,
+  engineInit,
+  getCameraSize,
+  hsl,
+  mainCanvasSize,
+  mousePos,
+  RED,
+  setCameraPos,
+  setCameraScale,
+  setCanvasFixedSize,
+  setGravity,
+  vec2,
+  WHITE,
+  YELLOW,
+} from "littlejsengine";
+import { initDefaultAtlas } from "./textureGenerator.js";
 
 // engine settings
 setGravity(vec2(0, 0)); // No gravity by default
@@ -22,61 +40,60 @@ setCameraScale(32); // Camera zoom, larger is more zoomed in
 let icons;
 
 ///////////////////////////////////////////////////////////////////////////////
-async function gameInit()
-{
-    // called once after the engine starts up
-    // setup the game
+async function gameInit() {
+  // called once after the engine starts up
+  // setup the game
 
-    // bake the 16 built-in white icons into the atlas (tint them per-instance)
-    icons = initDefaultAtlas();
+  // bake the 16 built-in white icons into the atlas (tint them per-instance)
+  icons = initDefaultAtlas();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-function gameUpdate()
-{
-    // called every frame at 60 frames per second
-    // handle input and update the game state
+function gameUpdate() {
+  // called every frame at 60 frames per second
+  // handle input and update the game state
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-function gameUpdatePost()
-{
-    // called after physics and objects are updated
-    // setup camera and prepare for render
+function gameUpdatePost() {
+  // called after physics and objects are updated
+  // setup camera and prepare for render
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-function gameRender()
-{
-    // called before objects are rendered
-    // draw any background effects that appear behind objects
+function gameRender() {
+  // called before objects are rendered
+  // draw any background effects that appear behind objects
 
-    // draw background gradient
-    drawRectGradient(cameraPos, getCameraSize(), BLACK, WHITE);
-        
-    // draw some shapes (circle is an atlas sprite tinted red)
-    drawTile(vec2(5,-3), vec2(5), icons.circle, RED);
-    drawRect(vec2(-5,-3), vec2(5,5), BLUE);
-    drawLine(cameraPos, mousePos, 1,  YELLOW);
+  // draw background gradient
+  drawRectGradient(cameraPos, getCameraSize(), BLACK, WHITE);
 
-    // draw world space text
-    drawText(`LittleJS Engine`, vec2(0,3), 3);
+  // draw some shapes (circle is an atlas sprite tinted red)
+  drawTile(vec2(5, -3), vec2(5), icons.circle, RED);
+  drawRect(vec2(-5, -3), vec2(5, 5), BLUE);
+  drawLine(cameraPos, mousePos, 1, YELLOW);
+
+  // draw world space text
+  drawText(`LittleJS Engine`, vec2(0, 3), 3);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-function gameRenderPost()
-{
-    // called after objects are rendered
-    // draw effects or hud that appear above all objects
+function gameRenderPost() {
+  // called after objects are rendered
+  // draw effects or hud that appear above all objects
 
-    // draw screen space text
-    drawTextScreen(`Hello World!`, 
-        vec2(mainCanvasSize.x/2, 70), 80,   // position, size
-        hsl(0,0,1), 6, hsl(0,0,0));         // color, outline size and color
+  // draw screen space text
+  drawTextScreen(
+    `Hello World!`, // text
+    vec2(mainCanvasSize.x / 2, 70), // position
+    80, // size
+    hsl(0, 0, 1), // color
+    6, // outline size
+    hsl(0, 0, 0), // outline color
+  );
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 // Startup LittleJS Engine
 engineInit(gameInit, gameUpdate, gameUpdatePost, gameRender, gameRenderPost);
-
 </script>

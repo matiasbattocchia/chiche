@@ -13,22 +13,20 @@ A LittleJS game here is an ES module: `index.html` loads `<script type=module sr
 - Model entities as classes extending `EngineObject` — the engine updates, moves, collides, and renders them automatically every frame:
 
 ```javascript
-class Player extends EngineObject
-{
-    constructor(pos)
-    {
-        super(pos, vec2(1), tile(0), 0, CYAN); // pos, size, tileInfo, angle, color
-    }
-    update()
-    {
-        this.velocity = keyDirection().scale(.2); // arrows/WASD move the player
-        // engine applies physics (velocity, gravity, collision) after update()
-        // no super.update() call is needed
-    }
+class Player extends EngineObject {
+  constructor(pos) {
+    super(pos, vec2(1), tile(0), 0, CYAN); // pos, size, tileInfo, angle, color
+  }
+  update() {
+    this.velocity = keyDirection().scale(.2); // arrows/WASD move the player
+    // engine applies physics (velocity, gravity, collision) after update()
+    // no super.update() call is needed
+  }
 }
 ```
 
 Spawn once in `gameInit` with `new Player(vec2(0))`; it draws itself — no manual draw call. Customize visuals via `this.tileInfo` / `this.color` / `this.angle`, or override `render()`.
+
 - Persisted settings/stats: use `readSaveData`/`writeSaveData` (localStorage-backed, JSON-serialized) — don't hand-roll localStorage. **Save data is always an object.** `readSaveData` returns `{...yourDefault, ...whatWasStored}`, so a scalar default spreads to nothing: `readSaveData('best', 0)` yields `{}`, not `0`, and the next arithmetic on it is `NaN` with no error. Always pass and read an object — `readSaveData('save', {best:0}).best` — and write the whole object back with `writeSaveData('save', {best:score})`.
 - **3D is built into the engine (1.19+) — use it, not three.js.** `new Render3DPlugin;` at the top of `gameInit` sets `render3D` and draws the scene every frame; import both from `'littlejsengine'` like any engine name, no CDN. Never declare `render3D` yourself, and keep WebGL on (no `setGLEnable(false)`) — the 3D scene draws on the engine's WebGL canvas with 2D and HUD draws over it. Objects are `new EngineObject3D(pos3D, mesh, tileInfo, color)` with `pos3D` / `rotation3D` / `scale3D` / `velocity3D`; meshes come from builders (`buildBox`, `buildSphere`, `buildCylinder`, `buildGrid`, ...). Aim the camera with `render3D.camera.orbit(target, distance, yaw, pitch)`, `.lookAt(target)`, or `.follow(target, offset, percent)` from `gameUpdatePost`. The engine still has a `ThreeJSPlugin` as well; only use it when the user asks for three.js by name.
 

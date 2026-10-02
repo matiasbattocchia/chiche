@@ -29,12 +29,12 @@ Scaffold a new playable LittleJS game by copying the closest **example game** ou
 
 Copy base — pick the closest **example game folder** (under `littlejs/examples/`):
 
-| Game uses…                  | Copy this folder | Why                                                  |
-|-----------------------------|------------------|--------------------------------------------------------|
-| Box2D physics               | `box2dGame/`     | Already wires `box2dInit` and the wasm loader        |
+| Game uses…                  | Copy this folder | Why                                                               |
+| --------------------------- | ---------------- | ----------------------------------------------------------------- |
+| Box2D physics               | `box2dGame/`     | Already wires `box2dInit` and the wasm loader                     |
 | 3D (any 3D game)            | `3dGame/`        | LittleJS built-in 3D — `Render3DPlugin`, terrain, lights, cameras |
-| Anything else (the default) | `emptyGame/`     | Canonical non-physics starter                        |
-| A simple arcade reference   | `pong/`          | Complete tiny game to read for structure             |
+| Anything else (the default) | `emptyGame/`     | Canonical non-physics starter                                     |
+| A simple arcade reference   | `pong/`          | Complete tiny game to read for structure                          |
 
 > These four are the only vetted starters — name them directly, don't glob for others.
 >
@@ -42,19 +42,19 @@ Copy base — pick the closest **example game folder** (under `littlejs/examples
 
 Pattern source — pick the closest **template** (`littlejs/templates/*.html`):
 
-| Game type / need                       | Template                  | Helper modules to wire (from `littlejs/templates/`) |
-|----------------------------------------|---------------------------|-----------------------------------------------------|
-| Basic shapes / text / camera (default) | `game.html`               | —                                                   |
-| Box2D physics                          | `box2dGame.html`          | (engine wasm loader, not a template module)         |
-| Turn-based grid / board                | `boardGame.html`          | `menus.js`, `gameFx.js`, `textureGenerator.js`      |
-| Playing cards                          | `cardsGame.html`          | `textureGenerator.js`, `cards.js`                   |
-| Title / pause / options UI             | `menuGame.html`           | `menus.js`                                          |
-| Procedural sprite atlas                | `textureGame.html`        | `textureGenerator.js`                               |
-| Shape/abstract/neon visuals, or many round entities | `textureGame.html` | `textureGenerator.js` — then apply the `littlejs/atlas-shape-art` skill |
-| Runtime tuning controls                | `tweakableGame.html`      | — (engine plugin, `tweak()`, debug builds only)     |
-| Canvas UI widgets                      | `uiGame.html`             | `menus.js` (+ `uiGame.html` patterns)               |
-| Sound effects + screen shake (any game)| (read `gameFx.js` API)    | `gameFx.js`                                         |
-| Computer opponent, turn-based 2-player | `boardGame.html` (board) | `gameAI.js` — describe the moves, `await alphaBetaAI(game, state, depth)`; a state keeps the position in `board` and the side to move in `currentPlayer` |
+| Game type / need                                    | Template                 | Helper modules to wire (from `littlejs/templates/`)                                                                                                      |
+| --------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Basic shapes / text / camera (default)              | `game.html`              | —                                                                                                                                                        |
+| Box2D physics                                       | `box2dGame.html`         | (engine wasm loader, not a template module)                                                                                                              |
+| Turn-based grid / board                             | `boardGame.html`         | `menus.js`, `gameFx.js`, `textureGenerator.js`                                                                                                           |
+| Playing cards                                       | `cardsGame.html`         | `textureGenerator.js`, `cards.js`                                                                                                                        |
+| Title / pause / options UI                          | `menuGame.html`          | `menus.js`                                                                                                                                               |
+| Procedural sprite atlas                             | `textureGame.html`       | `textureGenerator.js`                                                                                                                                    |
+| Shape/abstract/neon visuals, or many round entities | `textureGame.html`       | `textureGenerator.js` — then apply the `littlejs/atlas-shape-art` skill                                                                                  |
+| Runtime tuning controls                             | `tweakableGame.html`     | — (engine plugin, `tweak()`, debug builds only)                                                                                                          |
+| Canvas UI widgets                                   | `uiGame.html`            | `menus.js` (+ `uiGame.html` patterns)                                                                                                                    |
+| Sound effects + screen shake (any game)             | (read `gameFx.js` API)   | `gameFx.js`                                                                                                                                              |
+| Computer opponent, turn-based 2-player              | `boardGame.html` (board) | `gameAI.js` — describe the moves, `await alphaBetaAI(game, state, depth)`; a state keeps the position in `board` and the side to move in `currentPlayer` |
 
 Combine rows freely — `gameFx.js` stacks onto any other choice. A template's imports name the helpers its code uses: copy the ones whose code you take. A helper imports the helpers it needs from beside it: `cards.js` needs `textureGenerator.js`. The templates are ES modules like a game, importing the engine and the helpers beside them; read them for patterns, don't serve them.
 
@@ -65,16 +65,17 @@ Combine rows freely — `gameFx.js` stacks onto any other choice. A template's i
 3. `index.html` — retitle it. It loads `game.js` as a module and nothing else, except Box2D's wasm loader, a plain script before it in `box2dGame`:
 
    ```html
-   <script src=node_modules/littlejsengine/dist/box2d.wasm.js></script>  <!-- only for Box2D -->
+   <script src=node_modules/littlejsengine/dist/box2d.wasm.js></script>
+   <!-- only for Box2D -->
    <script type=module src=game.js></script>
    ```
 
    `game.js` imports the engine and the helpers:
 
    ```javascript
-   import { engineInit, vec2, drawTile } from 'littlejsengine';
-   import { initCardAtlas, drawCard } from './templates/cards.js';
-   import { createTitleMenu, showMenu } from './templates/menus.js';
+   import { drawTile, engineInit, vec2 } from "littlejsengine";
+   import { drawCard, initCardAtlas } from "./templates/cards.js";
+   import { createTitleMenu, showMenu } from "./templates/menus.js";
    ```
 
 4. `package.json` — set `name` to the game's name, lowercase.
@@ -92,18 +93,24 @@ Write the core loop into `game.js` (split into more modules — `player.js`, `ui
 
 ## Step 5 — Verify it actually runs before you hand it over
 
-Do not report a game as ready on the strength of having written it. At minimum, lint and type-check it (`deno lint game.js`, `deno check game.js`), look at the page and the console as for any web project, and re-read your own `gameInit`/`gameUpdate` for values that silently become `NaN` or `undefined` — save data read with a scalar default is the classic one (see `littlejs/littlejs-conventions`).
+Do not report a game as ready on the strength of having written it. At minimum, format, lint and type-check it (`deno fmt`, `deno lint game.js`, `deno check game.js`), look at the page and the console as for any web project, and re-read your own `gameInit`/`gameUpdate` for values that silently become `NaN` or `undefined` — save data read with a scalar default is the classic one (see `littlejs/littlejs-conventions`).
 
 If you need to drive the game programmatically to check something, expose a few hooks on `globalThis` from `game.js` for the session and say so in your summary.
 
 **Time-driven logic can be checked deterministically** (engine 1.18.25+). Anything on a `Timer`, a spawn interval, or a cooldown is otherwise unverifiable without sitting and watching, so when correctness depends on elapsed time, use the engine's headless stepping instead of guessing:
 
 ```javascript
-setHeadlessMode(true);      // no rendering, audio, or input
-setEngineManualStep(true);  // engine stops driving itself with requestAnimationFrame
-await engineInit(gameInit, gameUpdate, gameUpdatePost, gameRender, gameRenderPost);
+setHeadlessMode(true); // no rendering, audio, or input
+setEngineManualStep(true); // engine stops driving itself with requestAnimationFrame
+await engineInit(
+  gameInit,
+  gameUpdate,
+  gameUpdatePost,
+  gameRender,
+  gameRenderPost,
+);
 
-engineStep(600);            // advance exactly 10 seconds of game time at 60fps
+engineStep(600); // advance exactly 10 seconds of game time at 60fps
 // now assert: did obstacles spawn? did the cooldown expire?
 ```
 
@@ -112,6 +119,7 @@ Both flags must be set BEFORE `engineInit`, one `engineStep(n)` runs exactly `n`
 Then say what you built, how to play it (the controls), what you assumed, and what you could change next.
 
 ## Common mistakes
+
 - **Scaffolding into or writing to `littlejs/`** — copy OUT of it only.
 - **Basing the project on a template** (`templates/*.html`) — single-file references; copy patterns OUT of them, copy the FOLDER from an example game.
 - **Copying `emptyGame` for a physics game** — copy `box2dGame` so the wasm is already wired.

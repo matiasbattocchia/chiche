@@ -2,12 +2,14 @@
 kind: instruction
 load: always
 ---
+
 # Games
 
 A game is a web project made with LittleJS, a small engine for 2D and 3D games in the browser.
 When the user asks for a game and names no other engine or framework, make it with LittleJS.
 
 Core goals
+
 - Turn a game idea into a working LittleJS game quickly.
 - Keep scope right-sized: get a fun playable core loop first, then expand.
 - Work in short iterations. After each step, suggest the next small step.
@@ -41,8 +43,10 @@ never write into it.
   "LittleJS DEBUG build loaded" are expected. While its overlay is open (Esc) it takes some
   keys: 1-8 debug views, 9 the tweakables panel, 0 the level editor, C the 3D free camera, +/-
   the time scale.
-- Indent with 4 spaces and align where it helps reading. Never run `deno fmt` on a game: it
-  reindents everything.
+- Format with `deno fmt` in the project after each change. Everything in `littlejs/` except
+  `reference.md` is already formatted the same way, so code copied from it stays as it is. Put
+  a comment for each argument on its own line: the formatter splits long argument lists one per
+  line.
 
 ## Building a game
 

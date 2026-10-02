@@ -112,46 +112,82 @@
 // ============================================================================
 
 import {
-    ParticleEmitter, RandomGenerator, Sound, WHITE, abs, cameraPos, drawRect, drawTile, engineAddPlugin,
-    engineObjects, getCameraSize, mainCanvasSize, mod, oscillate, rand, rgb, setCameraPos, time, timeDelta,
-    timeReal, vec2,
-} from 'littlejsengine';
+  abs,
+  cameraPos,
+  drawRect,
+  drawTile,
+  engineAddPlugin,
+  engineObjects,
+  getCameraSize,
+  mainCanvasSize,
+  mod,
+  oscillate,
+  ParticleEmitter,
+  rand,
+  RandomGenerator,
+  rgb,
+  setCameraPos,
+  Sound,
+  time,
+  timeDelta,
+  timeReal,
+  vec2,
+  WHITE,
+} from "littlejsengine";
 
 // AI can use this class to make sound effects
-export class SoundGenerator extends Sound
-{
-    constructor(params = {})
-    {
-        const {
-            // ── CORE — reach for these first ──
-            frequency     = 220,  // [core] Pitch of the tone (Hz, ~9..2000)
-            volume        = 1,    // [core] Overall loudness scale (percent, ~0..1, may exceed 1)
-            attack        = 0,    // [core] Fade-in time (seconds, 0..3)
-            release       = .1,   // [core] Fade-out time — keep >0 to avoid clicks (seconds, 0..3)
-            randomness    = .05,  // [core] Per-play frequency wobble (percent, 0..1)
-            slide         = 0,    // [core] Pitch glide (kHz/s, + rises / - falls)
-            pitchJump     = 0,    // [core] Pitch step applied at pitchJumpTime (Hz, ±)
-            pitchJumpTime = 0,    // [core] When the pitch jump fires (seconds)
-            noise         = 0,    // [core] Random hiss; 0 or ~.1 for most, 5..50 for explosions (+ bitCrush)
-            shapeCurve    = 1,    // [core] Wave sharpness (0=square,1=normal,2=pointy); duty cycle for square
-            repeatTime    = 0,    // [core] Periodically resets pitch/slide for arps/stutters (seconds)
-            bitCrush      = 0,    // [core] Lo-fi crunch; light .1-.3 for retro, key to explosions w/ noise (samples*100, 0..1)
-            delay         = 0,    // [core] Overlay a delayed copy for reverb/thicken (seconds)
-            // ── ADVANCED — leave at default unless confident or the user asks (see header) ──
-            shape         = 0,    // [adv] Waveform: 0 sine,1 triangle,2 saw,3 tan,4 noise,5 square
-            sustain       = 0,    // [adv] Hold time at sustainVolume — for ringing/music notes (seconds, 0..3)
-            decay         = 0,    // [adv] Fade from full volume to sustainVolume after attack (seconds, 0..3)
-            sustainVolume = 1,    // [adv] Level held during sustain after decay (percent, 0..1)
-            filter        = 0,    // [adv] Cutoff Hz; + high-pass (brighten), - low-pass (muffle), 0 off
-            modulation    = 0,    // [adv] FM frequency for metallic/vibrato, negative flips phase (Hz, ±)
-            tremolo       = 0,    // [adv] Volume wobble depth, pulsed at repeatTime (percent, 0..1; needs repeatTime)
-            deltaSlide    = 0,    // [adv] Rate of change of slide — curves the glide (kHz/s/s, ±)
-        } = params;
+export class SoundGenerator extends Sound {
+  constructor(params = {}) {
+    const {
+      // ── CORE — reach for these first ──
+      frequency = 220, // [core] Pitch of the tone (Hz, ~9..2000)
+      volume = 1, // [core] Overall loudness scale (percent, ~0..1, may exceed 1)
+      attack = 0, // [core] Fade-in time (seconds, 0..3)
+      release = .1, // [core] Fade-out time — keep >0 to avoid clicks (seconds, 0..3)
+      randomness = .05, // [core] Per-play frequency wobble (percent, 0..1)
+      slide = 0, // [core] Pitch glide (kHz/s, + rises / - falls)
+      pitchJump = 0, // [core] Pitch step applied at pitchJumpTime (Hz, ±)
+      pitchJumpTime = 0, // [core] When the pitch jump fires (seconds)
+      noise = 0, // [core] Random hiss; 0 or ~.1 for most, 5..50 for explosions (+ bitCrush)
+      shapeCurve = 1, // [core] Wave sharpness (0=square,1=normal,2=pointy); duty cycle for square
+      repeatTime = 0, // [core] Periodically resets pitch/slide for arps/stutters (seconds)
+      bitCrush = 0, // [core] Lo-fi crunch; light .1-.3 for retro, key to explosions w/ noise (samples*100, 0..1)
+      delay = 0, // [core] Overlay a delayed copy for reverb/thicken (seconds)
+      // ── ADVANCED — leave at default unless confident or the user asks (see header) ──
+      shape = 0, // [adv] Waveform: 0 sine,1 triangle,2 saw,3 tan,4 noise,5 square
+      sustain = 0, // [adv] Hold time at sustainVolume — for ringing/music notes (seconds, 0..3)
+      decay = 0, // [adv] Fade from full volume to sustainVolume after attack (seconds, 0..3)
+      sustainVolume = 1, // [adv] Level held during sustain after decay (percent, 0..1)
+      filter = 0, // [adv] Cutoff Hz; + high-pass (brighten), - low-pass (muffle), 0 off
+      modulation = 0, // [adv] FM frequency for metallic/vibrato, negative flips phase (Hz, ±)
+      tremolo = 0, // [adv] Volume wobble depth, pulsed at repeatTime (percent, 0..1; needs repeatTime)
+      deltaSlide = 0, // [adv] Rate of change of slide — curves the glide (kHz/s/s, ±)
+    } = params;
 
-        super([volume, randomness, frequency, attack, sustain, release, shape, shapeCurve,
-            slide, deltaSlide, pitchJump, pitchJumpTime, repeatTime, noise, modulation,
-            bitCrush, delay, sustainVolume, decay, tremolo, filter]);
-    }
+    super([
+      volume,
+      randomness,
+      frequency,
+      attack,
+      sustain,
+      release,
+      shape,
+      shapeCurve,
+      slide,
+      deltaSlide,
+      pitchJump,
+      pitchJumpTime,
+      repeatTime,
+      noise,
+      modulation,
+      bitCrush,
+      delay,
+      sustainVolume,
+      decay,
+      tremolo,
+      filter,
+    ]);
+  }
 }
 
 // ============================================================================
@@ -165,43 +201,44 @@ export class SoundGenerator extends Sound
 // below without games needing additional engineAddPlugin calls.
 // ============================================================================
 
-export let _shakeAmount    = 0;     // peak amplitude in world units
-export let _shakeRemaining = 0;     // seconds left
-export let _shakeDuration  = 1;     // original duration of the active event
-export let _shakeEnabled   = true;
-export let _shakeOffset    = vec2(); // nudge currently applied to cameraPos (undone next frame)
+export let _shakeAmount = 0; // peak amplitude in world units
+export let _shakeRemaining = 0; // seconds left
+export let _shakeDuration = 1; // original duration of the active event
+export let _shakeEnabled = true;
+export let _shakeOffset = vec2(); // nudge currently applied to cameraPos (undone next frame)
 
-export function addScreenShake(amount, duration)
-{
-    if (!(amount > 0) || !(duration > 0)) return;
-    const newEnergy = amount * duration;
-    const curEnergy = _shakeAmount * _shakeRemaining;
-    if (newEnergy <= curEnergy) return;
-    _shakeAmount    = amount;
-    _shakeRemaining = duration;
-    _shakeDuration  = duration;
+export function addScreenShake(amount, duration) {
+  if (!(amount > 0) || !(duration > 0)) return;
+  const newEnergy = amount * duration;
+  const curEnergy = _shakeAmount * _shakeRemaining;
+  if (newEnergy <= curEnergy) return;
+  _shakeAmount = amount;
+  _shakeRemaining = duration;
+  _shakeDuration = duration;
 }
 
-export function setScreenShakeEnabled(b) { _shakeEnabled = !!b; }
-export function isScreenShakeEnabled()   { return _shakeEnabled; }
+export function setScreenShakeEnabled(b) {
+  _shakeEnabled = !!b;
+}
+export function isScreenShakeEnabled() {
+  return _shakeEnabled;
+}
 
-export function _shakeUpdate()
-{
-    // undo last frame's nudge first, so the camera always returns to where the
-    // game put it and shake can never drift it (this used to be a random walk)
-    setCameraPos(cameraPos.subtract(_shakeOffset));
-    _shakeOffset = vec2();
-    if (_shakeRemaining <= 0) return;
-    _shakeRemaining -= timeDelta;
-    if (_shakeRemaining <= 0)
-    {
-        _shakeAmount = 0;
-        return;
-    }
-    if (!_shakeEnabled) return;
-    const a = _shakeAmount * (_shakeRemaining / _shakeDuration);
-    _shakeOffset = vec2(rand(-a, a), rand(-a, a));
-    setCameraPos(cameraPos.add(_shakeOffset));
+export function _shakeUpdate() {
+  // undo last frame's nudge first, so the camera always returns to where the
+  // game put it and shake can never drift it (this used to be a random walk)
+  setCameraPos(cameraPos.subtract(_shakeOffset));
+  _shakeOffset = vec2();
+  if (_shakeRemaining <= 0) return;
+  _shakeRemaining -= timeDelta;
+  if (_shakeRemaining <= 0) {
+    _shakeAmount = 0;
+    return;
+  }
+  if (!_shakeEnabled) return;
+  const a = _shakeAmount * (_shakeRemaining / _shakeDuration);
+  _shakeOffset = vec2(rand(-a, a), rand(-a, a));
+  setCameraPos(cameraPos.add(_shakeOffset));
 }
 
 // Active input device (lastInputDevice + usingMouseInput/usingKeyboardInput/
@@ -247,104 +284,138 @@ export function _shakeUpdate()
 // scroll with the camera by per-layer `parallax` as DEPTH (1 = fixed in the world,
 // 0 = nailed to the view), wrapped seamlessly via mod(); off-screen stars cull.
 // ============================================================================
-export class Starfield
-{
-    constructor({
-        seed = 1234, screenSpace = false, tile, area, center = vec2(),
-        color = WHITE,
-        count = 150, parallax = 0,
-        sizeMin = .05, sizeMax = .12, alphaMin = .6, alphaMax = 1,
-        twSpeedMin = 1, twSpeedMax = 3,
-        twinkleBase = .55, twinkleAmp = .45, twinkleSize = false,
-        tintChance = 0, tints, layers,
-        drift, driftSpeedMin = 1, driftSpeedMax = 1, unpaused = false, wrap = 0,
-    } = {})
-    {
-        this.seed        = seed || 1234;   // xorshift requires non-zero
-        this.screenSpace = screenSpace;
-        this.tile        = tile;
-        this.color       = color;
-        this.area        = area || (screenSpace ? vec2(2000) : vec2(40, 24));
-        this.center      = center;
-        this.twinkleBase = twinkleBase;
-        this.twinkleAmp  = twinkleAmp;
-        this.twinkleSize = twinkleSize;
-        this.drift       = drift;          // vec2 dir; enables stateless scroll (world mode)
-        this.unpaused    = unpaused;       // animate from timeReal (runs while paused)
-        this.wrap        = wrap;           // >0 = horizontal world cylinder of this width
-        this.layers      = layers || [{ count, parallax, sizeMin, sizeMax,
-            alphaMin, alphaMax, twSpeedMin, twSpeedMax, tintChance, tints,
-            driftSpeedMin, driftSpeedMax }];
+export class Starfield {
+  constructor({
+    seed = 1234,
+    screenSpace = false,
+    tile,
+    area,
+    center = vec2(),
+    color = WHITE,
+    count = 150,
+    parallax = 0,
+    sizeMin = .05,
+    sizeMax = .12,
+    alphaMin = .6,
+    alphaMax = 1,
+    twSpeedMin = 1,
+    twSpeedMax = 3,
+    twinkleBase = .55,
+    twinkleAmp = .45,
+    twinkleSize = false,
+    tintChance = 0,
+    tints,
+    layers,
+    drift,
+    driftSpeedMin = 1,
+    driftSpeedMax = 1,
+    unpaused = false,
+    wrap = 0,
+  } = {}) {
+    this.seed = seed || 1234; // xorshift requires non-zero
+    this.screenSpace = screenSpace;
+    this.tile = tile;
+    this.color = color;
+    this.area = area || (screenSpace ? vec2(2000) : vec2(40, 24));
+    this.center = center;
+    this.twinkleBase = twinkleBase;
+    this.twinkleAmp = twinkleAmp;
+    this.twinkleSize = twinkleSize;
+    this.drift = drift; // vec2 dir; enables stateless scroll (world mode)
+    this.unpaused = unpaused; // animate from timeReal (runs while paused)
+    this.wrap = wrap; // >0 = horizontal world cylinder of this width
+    this.layers = layers ||
+      [{
+        count,
+        parallax,
+        sizeMin,
+        sizeMax,
+        alphaMin,
+        alphaMax,
+        twSpeedMin,
+        twSpeedMax,
+        tintChance,
+        tints,
+        driftSpeedMin,
+        driftSpeedMax,
+      }];
+  }
+
+  draw() {
+    const rng = new RandomGenerator(this.seed);
+    const W = mainCanvasSize.x, H = mainCanvasSize.y;
+    const screen = this.screenSpace, drift = this.drift, wrap = this.wrap;
+    const t = this.unpaused ? timeReal : time;
+    let halfVisW, yMin, yMax;
+    if (wrap) {
+      const cs = getCameraSize();
+      halfVisW = cs.x / 2 + 1;
+      yMin = cameraPos.y - cs.y / 2 - 1;
+      yMax = cameraPos.y + cs.y / 2 + 1;
     }
+    for (const L of this.layers) {
+      const par = L.parallax || 0;
+      const tints = L.tints, tintChance = L.tintChance || 0;
+      for (let i = L.count; i--;) {
+        // derive this star deterministically (FIXED call order)
+        const rx = rng.float(), ry = rng.float();
+        const size = rng.float(L.sizeMax, L.sizeMin);
+        const alpha = rng.float(L.alphaMax, L.alphaMin);
+        const twSpeed = rng.float(L.twSpeedMax, L.twSpeedMin);
+        const twPhase = rng.float();
+        const tintRoll = rng.float();
+        const tintIdx = tints ? rng.int(tints.length) : 0;
+        const dspeed = drift ? rng.float(L.driftSpeedMax, L.driftSpeedMin) : 0;
+        const col = (tints && tintRoll < tintChance)
+          ? tints[tintIdx]
+          : this.color;
 
-    draw()
-    {
-        const rng = new RandomGenerator(this.seed);
-        const W = mainCanvasSize.x, H = mainCanvasSize.y;
-        const screen = this.screenSpace, drift = this.drift, wrap = this.wrap;
-        const t = this.unpaused ? timeReal : time;
-        let halfVisW, yMin, yMax;
-        if (wrap)
-        {
-            const cs = getCameraSize();
-            halfVisW = cs.x/2 + 1;
-            yMin = cameraPos.y - cs.y/2 - 1;
-            yMax = cameraPos.y + cs.y/2 + 1;
+        const tw = this.twinkleBase +
+          this.twinkleAmp * oscillate(twSpeed, 1, t, twPhase);
+        const sz = size * (this.twinkleSize ? tw : 1);
+        const c = rgb(col.r, col.g, col.b, alpha * tw);
+
+        if (screen) {
+          const sx = mod(rx * this.area.x - cameraPos.x * par, W);
+          const sy = mod(ry * this.area.y + cameraPos.y * par, H);
+          if (this.tile) {
+            drawTile(
+              vec2(sx, sy),
+              vec2(sz),
+              this.tile,
+              c,
+              0,
+              0,
+              undefined,
+              undefined,
+              true,
+            );
+          } else drawRect(vec2(sx, sy), vec2(sz), c, 0, true, true);
+        } else {
+          let wx = this.center.x + (rx * 2 - 1) * this.area.x;
+          let wy = this.center.y + (ry * 2 - 1) * this.area.y;
+          if (wrap) {
+            // horizontal world cylinder of width `wrap` with depth
+            // parallax: a star at worldX = rx*wrap lags the camera by
+            // (1 - par). par=1 sits in the world, par->0 nails it to the
+            // view. mod() wraps the field seamlessly (handles negatives).
+            const dx = mod(rx * wrap - cameraPos.x * par + wrap / 2, wrap) -
+              wrap / 2;
+            if (abs(dx) > halfVisW || wy < yMin || wy > yMax) continue;
+            wx = cameraPos.x + dx;
+          } else if (drift) {
+            const ax = this.area.x, ay = this.area.y;
+            wx = mod(wx + drift.x * dspeed * t - this.center.x + ax, 2 * ax) +
+              this.center.x - ax;
+            wy = mod(wy + drift.y * dspeed * t - this.center.y + ay, 2 * ay) +
+              this.center.y - ay;
+          }
+          if (this.tile) drawTile(vec2(wx, wy), vec2(sz), this.tile, c);
+          else drawRect(vec2(wx, wy), vec2(sz), c);
         }
-        for (const L of this.layers)
-        {
-            const par = L.parallax || 0;
-            const tints = L.tints, tintChance = L.tintChance || 0;
-            for (let i = L.count; i--;)
-            {
-                // derive this star deterministically (FIXED call order)
-                const rx = rng.float(), ry = rng.float();
-                const size    = rng.float(L.sizeMax, L.sizeMin);
-                const alpha   = rng.float(L.alphaMax, L.alphaMin);
-                const twSpeed = rng.float(L.twSpeedMax, L.twSpeedMin);
-                const twPhase = rng.float();
-                const tintRoll = rng.float();
-                const tintIdx  = tints ? rng.int(tints.length) : 0;
-                const dspeed   = drift ? rng.float(L.driftSpeedMax, L.driftSpeedMin) : 0;
-                const col = (tints && tintRoll < tintChance) ? tints[tintIdx] : this.color;
-
-                const tw = this.twinkleBase + this.twinkleAmp * oscillate(twSpeed, 1, t, twPhase);
-                const sz = size * (this.twinkleSize ? tw : 1);
-                const c  = rgb(col.r, col.g, col.b, alpha * tw);
-
-                if (screen)
-                {
-                    const sx = mod(rx*this.area.x - cameraPos.x*par, W);
-                    const sy = mod(ry*this.area.y + cameraPos.y*par, H);
-                    if (this.tile) drawTile(vec2(sx, sy), vec2(sz), this.tile, c, 0, 0, undefined, undefined, true);
-                    else           drawRect(vec2(sx, sy), vec2(sz), c, 0, true, true);
-                }
-                else
-                {
-                    let wx = this.center.x + (rx*2 - 1)*this.area.x;
-                    let wy = this.center.y + (ry*2 - 1)*this.area.y;
-                    if (wrap)
-                    {
-                        // horizontal world cylinder of width `wrap` with depth
-                        // parallax: a star at worldX = rx*wrap lags the camera by
-                        // (1 - par). par=1 sits in the world, par->0 nails it to the
-                        // view. mod() wraps the field seamlessly (handles negatives).
-                        const dx = mod(rx*wrap - cameraPos.x*par + wrap/2, wrap) - wrap/2;
-                        if (abs(dx) > halfVisW || wy < yMin || wy > yMax) continue;
-                        wx = cameraPos.x + dx;
-                    }
-                    else if (drift)
-                    {
-                        const ax = this.area.x, ay = this.area.y;
-                        wx = mod(wx + drift.x*dspeed*t - this.center.x + ax, 2*ax) + this.center.x - ax;
-                        wy = mod(wy + drift.y*dspeed*t - this.center.y + ay, 2*ay) + this.center.y - ay;
-                    }
-                    if (this.tile) drawTile(vec2(wx, wy), vec2(sz), this.tile, c);
-                    else           drawRect(vec2(wx, wy), vec2(sz), c);
-                }
-            }
-        }
+      }
     }
+  }
 }
 
 // ============================================================================
@@ -356,21 +427,19 @@ export class Starfield
 // hand-rolled particle array onto ParticleEmitter call this where they used to
 // do `particles.length = 0`. Harmless (a no-op) in games with no emitters.
 // ============================================================================
-export function clearParticles()
-{
-    for (const o of engineObjects)
-        if (o instanceof ParticleEmitter) o.destroy(true);
+export function clearParticles() {
+  for (const o of engineObjects) {
+    if (o instanceof ParticleEmitter) o.destroy(true);
+  }
 }
 
-export function gameFxUpdate()
-{
-    _shakeUpdate();
-    // future feel-helpers slot in here
+export function gameFxUpdate() {
+  _shakeUpdate();
+  // future feel-helpers slot in here
 }
 
-export function gameFxRender()
-{
-    // reserved for future render-phase effects
+export function gameFxRender() {
+  // reserved for future render-phase effects
 }
 
 engineAddPlugin(gameFxUpdate, gameFxRender);
