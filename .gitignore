@@ -1,12 +1,9 @@
 .env
-node_modules/
-# chiche: one folder per run, and the kid's browser profile
+# chiche: one folder per run
 log/
-.browser/
 # data/ is the agents' volume: track what they are, not what they did
 data/log/
 data/run/
-data/relay/
 # the harness's own words, read live from the checkout; no system skills
 data/system/*
 !data/system/instructions
