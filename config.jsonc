@@ -91,6 +91,9 @@
       "provider": "google",
       "model": "gemini-3.8-flash",
       "effort": "medium",
+      // the display the user watches: without them `playwright-cli open --headed` fails, and
+      // the agent fell back to a headless browser nobody saw
+      "export": ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR"],
       "mind": true
     }
   },
