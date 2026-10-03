@@ -839,11 +839,11 @@ async function endSession() {
   const v = up.voice;
   if (!v?.connected) return saveSession();
   if (channel) {
-    forward(
-      "stopped: chiche was closed; if the coding agent was working, ask again next time",
-      Scheduling.SILENT,
-      false,
-    );
+    const stopped =
+      "stopped: chiche was closed; if the coding agent was working, ask again next time";
+    // not shown, the run is over; kept as chat for the tail a lost session gets
+    forward(stopped, Scheduling.SILENT, false, true);
+    chat(stopped);
     const came = await v.nextHandle(3000);
     log.line(
       "session",
