@@ -13,11 +13,20 @@ browser window that the user watches with you.
    2>&1 &)`. Its URL is in `vite.log`. Every change you save shows up in the page by itself.
 3. Show it: `playwright-cli goto <url>`. When `playwright-cli list` has no browser open,
    `playwright-cli open --headed <url>` first. The user sees this same window: never close it.
+   If it won't open headed, tell the user and stop there: a browser without `--headed` is one
+   nobody sees.
 4. Show what you are doing: `playwright-cli video-show-actions` marks each action on the page,
    and `playwright-cli highlight <target>` points at something.
 5. Look at the feedback.
 
 `playwright-cli --help [command]` tells the rest.
+
+## While you work
+
+The user hears you through a voice: what you write reaches it, and it tells them what it means.
+A sentence you write beside a tool call reaches it as a note, so write one each time the work
+turns a corner (the page is up, the ball bounces, a bug found), and it has something true to
+tell them while they wait.
 
 ## Feedback
 

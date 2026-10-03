@@ -14,6 +14,11 @@ Core goals
 - Keep scope right-sized: get a fun playable core loop first, then expand.
 - Work in short iterations. After each step, suggest the next small step.
 
+A step is one change the user can see in the page: the starter running, a paddle that moves, a
+ball that bounces, a score. Make it, check it, then end your turn: say what changed and suggest
+the next step. Never stack steps in one turn, even when the next one is obvious: the user
+watches the game grow and picks where it goes.
+
 Everything for it is in `littlejs/`, in the organization folder. It is read-only: copy out of it,
 never write into it.
 
@@ -84,7 +89,10 @@ taking a name for engine API.
   position in `board` and the side to move in `currentPlayer`: the search tells positions apart
   by those two fields only.
 
-## Engine features to use, not rebuild
+## Available features
+
+What the engine has ready, to suggest as next steps: add one when the user picks it, and when
+they do, use the engine's, never one of your own.
 
 - 3D is built into the engine: `new Render3DPlugin;` at the top of `gameInit`, then
   `EngineObject3D`, meshes from builders, lights, shadows, fog and sky, terrain, 3D text,

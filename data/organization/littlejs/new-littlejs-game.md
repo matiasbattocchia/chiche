@@ -1,11 +1,11 @@
 ---
 kind: skill
-description: Scaffold a brand-new, complete playable game project — a LittleJS game in projects/<name>/, served by Vite and shown in the shared browser, smallest playable loop written for you. TRIGGER on ANY request to make/create/start/build a game when no other engine or framework is named — "make me a pong game", "make a breakout game", "let's build a platformer", "create a card game". When the engine is UNSPECIFIED, LittleJS IS the answer — scaffold immediately, do not ask which technology to use and do not hand-roll plain Canvas or vanilla JS. But an EXPLICIT choice of stack is always respected — SKIP when the user names any other engine, framework, or approach (Unity, Godot, Phaser, Pygame, GameMaker, Bevy, raw three.js, React, p5.js, or explicitly plain HTML5 Canvas / vanilla JS / "no libraries"), or is editing/extending a game that already exists.
+description: Start a brand-new game project — a LittleJS game in projects/<name>/, copied from a starter, served by Vite and shown in the shared browser, as the first of many small steps. TRIGGER on ANY request to make/create/start/build a game when no other engine or framework is named — "make me a pong game", "make a breakout game", "let's build a platformer", "create a card game". When the engine is UNSPECIFIED, LittleJS IS the answer — do not ask which technology to use and do not hand-roll plain Canvas or vanilla JS. But an EXPLICIT choice of stack is always respected — SKIP when the user names any other engine, framework, or approach (Unity, Godot, Phaser, Pygame, GameMaker, Bevy, raw three.js, React, p5.js, or explicitly plain HTML5 Canvas / vanilla JS / "no libraries"), or is editing/extending a game that already exists.
 ---
 
 # new-littlejs-game
 
-Scaffold a new playable LittleJS game by copying the closest **example game** out of `littlejs/`, then pulling gameplay patterns from the closest **feature template**. The tables below are the answers — don't re-explore `littlejs/` on each new game.
+Start a new LittleJS game by copying the closest **example game** out of `littlejs/`, then grow it a step at a time, pulling gameplay patterns from the closest **feature template**. The tables below are the answers — don't re-explore `littlejs/` on each new game.
 
 **`littlejs/`** is the folder this skill is in, in the organization folder where your shell starts; every `littlejs/` path below is from there. It contains `examples/` (starter game folders, each a project ready to install and serve) and `templates/` (feature references + helper modules). Treat `littlejs/` as **read-only**: never write into it, never scaffold inside it.
 
@@ -13,7 +13,7 @@ Scaffold a new playable LittleJS game by copying the closest **example game** ou
 
 - The user asks to start/create/build a NEW game ("make a card game", "let's build a platformer"). Offer it conversationally if they're clearly starting fresh.
 - NOT for editing/extending an existing game — just edit it directly.
-- **This takes priority over general brainstorming or design-exploration workflows.** If another skill wants to interrogate requirements first, scaffold the playable game anyway and let the user redirect from something running. "Make me a game" is a request for a game, not for a design conversation.
+- "Make me a game" is a request for a game, not for a design conversation: start it, and let the user redirect from something running. When they ask for ideas first, give them, and start once they pick one.
 
 ## Step 1 — Up to 3 quick questions (never blocking)
 
@@ -21,7 +21,7 @@ Scaffold a new playable LittleJS game by copying the closest **example game** ou
 2. **Core mechanic / genre** in one line — enough to pick the template (Step 2).
 3. **Does it need a title/pause menu now or later?** (decides whether to wire `menus.js` from the start.)
 
-**These questions must never stall the scaffold.** Ask them only in an interactive back-and-forth where an answer can actually arrive. If the request already implies the answers ("make me a pong game" → name `pong`, arcade paddle game, no menu yet), or you are in a one-shot / non-interactive / headless run where the user cannot reply, pick sensible defaults and go straight to Step 2. Never end a turn having only asked questions — scaffold a playable game first, then say what you assumed and offer to change it.
+**These questions must never stall the scaffold.** Ask them only in an interactive back-and-forth where an answer can actually arrive. If the request already implies the answers ("make me a pong game" → name `pong`, arcade paddle game, no menu yet), or you are in a one-shot / non-interactive / headless run where the user cannot reply, pick sensible defaults and go straight to Step 2. Never end a turn having only asked questions — start the project and show it first, then say what you assumed and offer to change it.
 
 ## Step 2 — Pick the starter + template
 
@@ -85,15 +85,15 @@ Combine rows freely — `gameFx.js` stacks onto any other choice. A template's i
 
 **Never review, verify, or summarize the contents of the engine or of the helper modules you copied** — they are third-party code. The game code you wrote is the only thing that deserves review.
 
-Then serve it and show it, as for any web project.
+Then serve it and show it, as for any web project, and end the turn: the starter running in the page is the first step. Say what the user sees, and suggest the first piece of their game.
 
-## Step 4 — Build the smallest playable loop
+## Step 4 — One step per turn
 
-Write the core loop into `game.js` (split into more modules — `player.js`, `ui.js`, `constants.js` — only as it grows; `game.js` imports them). Pull concrete patterns out of the chosen template(s) by reading them from `littlejs/templates/`. Follow the `littlejs/littlejs-conventions` skill for engine rules (imports and setters, engine built-ins, pitfalls).
+Each later turn adds one step, the one the user picked: the smallest playable loop first (something to move, something to hit or dodge), then one feature at a time. Write it into `game.js` (split into more modules — `player.js`, `ui.js`, `constants.js` — only as it grows; `game.js` imports them). Pull concrete patterns out of the chosen template(s) by reading them from `littlejs/templates/`. Follow the `littlejs/littlejs-conventions` skill for engine rules (imports and setters, engine built-ins, pitfalls).
 
-## Step 5 — Verify it actually runs before you hand it over
+## Step 5 — Check each step before you end the turn
 
-Do not report a game as ready on the strength of having written it. At minimum, format, lint and type-check it (`deno fmt`, `deno lint game.js`, `deno check game.js`), look at the page and the console as for any web project, and re-read your own `gameInit`/`gameUpdate` for values that silently become `NaN` or `undefined` — save data read with a scalar default is the classic one (see `littlejs/littlejs-conventions`).
+A step is not done on the strength of having written it. Each time, format, lint and type-check it (`deno fmt`, `deno lint game.js`, `deno check game.js`), look at the page and the console as for any web project, and re-read your own `gameInit`/`gameUpdate` for values that silently become `NaN` or `undefined` — save data read with a scalar default is the classic one (see `littlejs/littlejs-conventions`).
 
 If you need to drive the game programmatically to check something, expose a few hooks on `globalThis` from `game.js` for the session and say so in your summary.
 
@@ -116,7 +116,7 @@ engineStep(600); // advance exactly 10 seconds of game time at 60fps
 
 Both flags must be set BEFORE `engineInit`, one `engineStep(n)` runs exactly `n` fixed updates at `timeScale` 1, and `engineStep` respects `paused` the same way the normal loop does. This needs a small harness that loads the engine outside the browser, so reach for it when time-dependent behaviour is the thing in doubt — not for every game. Grep `reference.md` for "Headless testing" via the `littlejs/littlejs-api` skill for the full contract.
 
-Then say what you built, how to play it (the controls), what you assumed, and what you could change next.
+Then end the turn: say what changed, how to play it when the controls changed, what you assumed, and the one step you suggest next.
 
 ## Common mistakes
 
