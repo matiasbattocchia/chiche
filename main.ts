@@ -42,6 +42,15 @@ export function languageOf(lang: string | undefined): string {
   return bare.replace("_", "-");
 }
 
+/** A language code's English name ("es-AR" → "Spanish (Argentina)"), or the code itself. */
+export function languageName(code: string): string {
+  try {
+    return new Intl.DisplayNames(["en"], { type: "language" }).of(code) ?? code;
+  } catch {
+    return code; // not a code Intl knows
+  }
+}
+
 // ── children ────────────────────────────────────────────────────────────────
 
 /** A long-lived child whose output lines go to `onLine`. */
@@ -126,9 +135,14 @@ if (pushKey !== undefined && pushKey === toggleKey) {
 }
 
 const log = await Log.open(ROOT);
-/** INSTRUCTIONS.md, when there is one; else the voice has no system instruction. */
+/**
+ * INSTRUCTIONS.md, when there is one; else the voice has no system instruction. {{LANG}} is the
+ * language's English name ("Spanish (Argentina)"): native audio models choose their language and
+ * don't take the speech config's code for it, but the system instructions can restrict it
+ * (ai.google.dev/gemini-api/docs/live-guide).
+ */
 const instructions = await Deno.readTextFile(join(ROOT, "INSTRUCTIONS.md")).then(
-  (t) => t.replaceAll("{{LANG}}", language),
+  (t) => t.replaceAll("{{LANG}}", languageName(language)),
   (e) => {
     if (e instanceof Deno.errors.NotFound) return undefined;
     throw e;
@@ -407,11 +421,11 @@ function failed(error: string) {
 const unlessSpoken = () => received > 0 ? Scheduling.SILENT : Scheduling.WHEN_IDLE;
 
 /**
- * A line to the voice through the channel, or dropped (work typed in the REPL, say). Shown and
- * kept as chat unless `quiet`: the states, which the status row shows instead.
+ * A line to the voice through the channel, or dropped (work typed in the REPL, say). Shown whole
+ * and kept as chat unless `quiet`: the states, which the status row shows instead.
  */
 function forward(output: string, scheduling: Scheduling, willContinue = true, quiet = false) {
-  const shown = clip(output.replaceAll("\n", " "), 120);
+  const shown = output.trim();
   if (!channel) {
     if (!quiet) term.dim(`(no input call open) ${shown}`);
     return;
@@ -486,7 +500,7 @@ async function input(callId: string, text: string) {
   // the newer call is the channel from here on; the older one is left open, with nothing
   // more to carry (whether the model minds a call never closed is not measured yet)
   channel = callId;
-  term.dim(`input: ${clip(text.replaceAll("\n", " "), 120)}`);
+  term.dim(`input: ${text.trim()}`);
   chat(`input: ${text}`);
   const r = up.door
     ? await up.door.message(text)
