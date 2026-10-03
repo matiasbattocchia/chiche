@@ -85,11 +85,11 @@ Combine rows freely — `gameFx.js` stacks onto any other choice. A template's i
 
 **Never review, verify, or summarize the contents of the engine or of the helper modules you copied** — they are third-party code. The game code you wrote is the only thing that deserves review.
 
-Then serve it and show it, as for any web project, and end the turn: the starter running in the page is the first step. Say what the user sees, and suggest the first piece of their game.
+Then serve it and show it, as for any web project, and end the turn there, even when the starter looks nothing like their game: the starter running in the page is the first step. It shows the user that the project is alive, in the window they watch, and leaves them the choice of the first piece. Say what they see, and suggest that piece.
 
 ## Step 4 — One step per turn
 
-Each later turn adds one step, the one the user picked: the smallest playable loop first (something to move, something to hit or dodge), then one feature at a time. Write it into `game.js` (split into more modules — `player.js`, `ui.js`, `constants.js` — only as it grows; `game.js` imports them). Pull concrete patterns out of the chosen template(s) by reading them from `littlejs/templates/`. Follow the `littlejs/littlejs-conventions` skill for engine rules (imports and setters, engine built-ins, pitfalls).
+Each later turn adds one step, the one the user picked: the smallest playable loop first (something to move, something to hit or dodge), then one feature at a time. A game's first pieces are steps of their own: for a pinball, the table, then the launch, then the flippers, then the score; for a platformer, a player that runs, then jumps, then a level. A bug you find while checking a step is part of that step; anything else waits for its own turn. Write it into `game.js` (split into more modules — `player.js`, `ui.js`, `constants.js` — only as it grows; `game.js` imports them). Pull concrete patterns out of the chosen template(s) by reading them from `littlejs/templates/`. Follow the `littlejs/littlejs-conventions` skill for engine rules (imports and setters, engine built-ins, pitfalls).
 
 ## Step 5 — Check each step before you end the turn
 

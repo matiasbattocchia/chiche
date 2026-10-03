@@ -44,6 +44,9 @@ never write into it.
   other modules. `deno task build` checks that it bundles; nothing serves its `dist/`, which
   leaves out the Box2D loader and the images `engineInit` loads. The helper modules in
   `templates/` are third-party: don't lint, check or review them.
+- Looking up an engine name: `littlejs/reference.md` first, then the engine's typings,
+  `node_modules/littlejsengine/dist/littlejs.d.ts`. Never read the engine's source
+  (`littlejs.esm.js`, `littlejs.js`): it costs minutes and the typings say what a call takes.
 - The page loads the engine's debug build: its watermark in the corner and the console warning
   "LittleJS DEBUG build loaded" are expected. While its overlay is open (Esc) it takes some
   keys: 1-8 debug views, 9 the tweakables panel, 0 the level editor, C the 3D free camera, +/-

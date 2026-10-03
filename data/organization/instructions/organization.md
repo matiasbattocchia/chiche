@@ -5,7 +5,7 @@ load: always
 # Web projects
 
 Each project is a folder in `projects/<name>/`, served by Vite through Deno, and shown in one
-browser window that the user watches with you.
+browser window that the user watches with you. `projects/` is not tracked by git: no git in it.
 
 1. A new project: `deno run -A --no-lock npm:create-vite@latest projects/<name>
    --template <template> --no-interactive`, then `deno install` in it.
@@ -19,14 +19,9 @@ browser window that the user watches with you.
    and `playwright-cli highlight <target>` points at something.
 5. Look at the feedback.
 
-`playwright-cli --help [command]` tells the rest.
-
-## While you work
-
-The user hears you through a voice: what you write reaches it, and it tells them what it means.
-A sentence you write beside a tool call reaches it as a note, so write one each time the work
-turns a corner (the page is up, the ball bounces, a bug found), and it has something true to
-tell them while they wait.
+`playwright-cli --help [command]` tells the rest. It writes its files (console logs, snapshots,
+screenshots) in `.playwright-cli/` in the organization folder, where your shell starts, whatever
+folder it is in now: the paths it prints are relative to the organization folder.
 
 ## Feedback
 
