@@ -12,12 +12,7 @@ Core goals
 
 - Turn a game idea into a working LittleJS game quickly.
 - Keep scope right-sized: get a fun playable core loop first, then expand.
-- Work in short iterations. After each step, suggest the next small step.
-
-A step is one change the user can see in the page: the starter running, a paddle that moves, a
-ball that bounces, a score. Make it, check it, then end your turn: say what changed and suggest
-the next step. Never stack steps in one turn, even when the next one is obvious: the user
-watches the game grow and picks where it goes.
+- Work in short iterations: one layer per turn, then suggest the next.
 
 Everything for it is in `littlejs/`, in the organization folder. It is read-only: copy out of it,
 never write into it.
@@ -31,6 +26,29 @@ never write into it.
 - `littlejs/atlas-shape-art`: shapes and many round things, drawn as tinted tiles.
 - `littlejs/examples/`: the starter projects. `littlejs/templates/`: pages to read patterns
   from, and the helper modules.
+
+## Layers
+
+A game grows in layers, one per turn, after the starter running in the page. Each layer is
+something the user sees work, made with what the engine has for it:
+
+1. Scene: the world drawn, standing still: the level's tiles (`TileLayer`), the shapes, the
+   colors.
+2. Controls: the player moves with the keys (`keyDirection`, `keyIsDown`).
+3. Physics: gravity and collisions, the player standing on the world and bumping into it
+   (`TileCollisionLayer`, the engine's object collisions, or Box2D).
+4. Rule: what there is to do, something to hit, dodge, break or collect, and the score.
+5. Particles: hits, breaks and pickups seen (`particleEffect`).
+6. Sound: the same heard (`Sound`, ZzFX).
+7. The game's own features, a layer each: monsters, crafting, a menu, a second level.
+
+Make the layer, check it, then end your turn: say what changed and suggest the next layer.
+Never stack layers in one turn, even when the next one is obvious: the user watches the game
+grow and picks where it goes. A request that names many things is many layers: build the first
+one missing, and say which come after. A message that comes in while you work either corrects
+the layer under way, and goes into it, or asks for something else, which is a later layer: say
+you'll do it next, and end the turn with the layer under way. A bug you find while checking a
+layer is part of it.
 
 ## How a game differs from other web projects
 
@@ -108,10 +126,13 @@ they do, use the engine's, never one of your own.
   `new PostProcessPlugin(postProcessEffects(postProcessGlow(), postProcessScanlines(),
   postProcessVignette()))`; `postProcessTV({...})` is an old TV in one piece. One post-process
   is active at a time, so combine effects with `postProcessEffects`.
-- Ready-made particles: `particleEffect(name, pos, {scale, hue})`, or `particleEffect3D` in 3D,
-  with fire, torch, smoke, steam, explosion, sparks, hit, dust, debris, sparkle, magic, heal,
-  poison, portal, rain, snow, leaves, bubbles, fireflies, trail, muzzle, blood, confetti and
-  splash. A `ParticleEmitter` only when none of these fits.
+- Ready-made particles: `particleEffect(name, pos, {scale, hue})`, or `particleEffect3D` in 3D.
+  One-shots end by themselves: explosion, hit, dust, debris, muzzle, blood, confetti and
+  splash. The rest go on until destroyed: fire, torch, smoke, steam, sparks, sparkle, magic,
+  heal, poison, portal, rain, snow, leaves, bubbles, fireflies and trail. For a burst of one of
+  those, pass `{emitTime: .3}`; one that lasts goes with what it belongs to: keep the emitter
+  `particleEffect` returns and `destroy()` it then. A `ParticleEmitter` only when none of these
+  fits.
 - Also in the engine: `ParallaxLayer`, lights, tweens, scenes, pathfinding and texture sheets.
   Check `littlejs/reference.md` before writing any of these.
 

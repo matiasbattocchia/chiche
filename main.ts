@@ -17,7 +17,7 @@ import { TextLineStream } from "@std/streams";
 import { Audio, type Device, type Mixer, mixer, unmute, VOICE_RATE, watchMixer } from "./audio.ts";
 import { INPUT_TOOL, MODEL, Scheduling, Voice } from "./gemini.ts";
 import { keyCode, keyName, Keys } from "./keys.ts";
-import { clip, Door, errorOf, isReply, isSaying, textOf, thoughtOf, toolUseOf } from "./liquen.ts";
+import { clip, Door, errorOf, headingsOf, isReply, isSaying, textOf, toolUseOf } from "./liquen.ts";
 import { Log } from "./log.ts";
 import { BOLD, DIM, GREEN, Meter, RED, RESET, Terminal, YELLOW } from "./term.ts";
 
@@ -364,10 +364,13 @@ let channel: string | undefined;
  * The coding agent as the door shows it: idle, or busy and either thinking (the model generates:
  * deltas arrive) or working (its tools run: from a step's first tool use to the next delta).
  * The voice is told each change of state, silently: the word alone. The commands the agent runs
- * are not sent; the summary of its thinking is, as thoughts, and what it says, as notes and
- * results.
+ * are not sent. What it is on is, as notes: each heading of its thinking as it streams in, and
+ * what it says between steps; and its answer, as the result.
  */
 let state: "idle" | "thinking" | "working" = "idle";
+/** The thinking streamed since the step's last tool or text, and how many of its headings went. */
+let thinking = "";
+let headings = 0;
 /** When the coding agent went busy on an input, for the updates. */
 let busySince: number | undefined;
 /** Whether the coding agent said something final since it went busy: a result, or an error. */
@@ -453,8 +456,6 @@ if (!noLiquen) {
     trace: (d, m) => log.door(d, m),
     event(e) {
       if (toolUseOf(e)) return become("working");
-      const thought = up.door && thoughtOf(e, up.door.address);
-      if (thought) return forward(`thought: ${thought}`, Scheduling.SILENT);
       if (up.door && isSaying(e, up.door.address)) {
         return forward(`note: ${textOf(e)}`, Scheduling.SILENT);
       }
@@ -469,6 +470,17 @@ if (!noLiquen) {
     delta(d) {
       if (d.kind === "error" && d.text) return failed(d.text);
       if (d.kind === "thinking" || d.kind === "text") become("thinking");
+      if (d.kind !== "thinking") {
+        thinking = "";
+        headings = 0;
+        return;
+      }
+      if (!d.text) return;
+      // a heading goes out once it is whole: the thinking under it waits for none
+      thinking += d.text;
+      const all = headingsOf(thinking);
+      for (const heading of all.slice(headings)) forward(`note: ${heading}`, Scheduling.SILENT);
+      headings = all.length;
     },
     // the door's turn edges; a turn that ended with no result and no error (a silence) is
     // told as one, or the voice goes on telling the user that work is under way

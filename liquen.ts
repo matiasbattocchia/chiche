@@ -20,7 +20,7 @@ export interface DoorEvent {
 }
 
 export interface Delta {
-  kind: "text" | "thinking" | "checkpoint" | "error";
+  kind: "text" | "thinking" | "tool" | "checkpoint" | "error";
   text?: string;
 }
 
@@ -181,13 +181,12 @@ export function isSaying(e: DoorEvent, address: string): boolean {
 }
 
 /**
- * The summary of the coding agent's thinking in its mind's room, one per step that thought:
- * both of liquen's transports ask the model for a summary, never the full reasoning.
+ * The headings in the coding agent's thinking so far ("Defining Player Actions"): Gemini sums
+ * its thinking up in parts, each opening with its heading in bold on a line of its own, and
+ * streams them a part or two to a delta (measured: log/2026-10-03T20-43-34, 255 deltas).
  */
-export function thoughtOf(e: DoorEvent, address: string): string | undefined {
-  if (e.type !== "thinking" || e.envelope?.conversation?.address !== address) return undefined;
-  const data = e.parts?.[0]?.data as { thinking?: string } | undefined;
-  return data?.thinking?.trim() || undefined;
+export function headingsOf(thinking: string): string[] {
+  return [...thinking.matchAll(/^\*\*([^*\n]+)\*\*[ \t]*$/gm)].map((m) => m[1].trim());
 }
 
 /** The last event the coding agent had read when it wrote this: the requests it answers. */

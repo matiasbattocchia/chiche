@@ -23,6 +23,14 @@ browser window that the user watches with you. `projects/` is not tracked by git
 screenshots) in `.playwright-cli/` in the organization folder, where your shell starts, whatever
 folder it is in now: the paths it prints are relative to the organization folder.
 
+## Who it is for
+
+The user is five years old. A project speaks to them in pictures: icons, symbols, colors and
+shapes say what text would (a heart for a life, the key drawn for a control, a star for a
+point), and the few words left are short and big. Those words are in the user's language, the
+one your `locale` names (`es_AR.UTF-8` is Spanish, as spoken in Argentina), even when the
+messages reach you in English.
+
 ## Feedback
 
 Nothing tells you when something goes wrong: you find out by looking. Look after each change
