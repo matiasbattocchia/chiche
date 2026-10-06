@@ -86,11 +86,12 @@
   "agents": {
     // <name>: any organization.agents key re-declared, plus identity — the name the agent goes by and the handles of the account it acts as (null ⇒ not declared); principals — who steers it, roster names ([] ⇒ nobody; absent ⇒ its owner, or every member when the account is the org's); mind: false — no session runs: a member with no agent of their own, or an agent paused
     "matias": {
-      // Gemini Flash at medium: a five-year-old is waiting; Opus took 3-6 s a step and 2.5k
-      // tokens of thinking to name tiles. Same GEMINI_API_KEY as the voice, from .env
+      // Gemini Flash at low: a five-year-old is waiting; Opus took 3-6 s a step and 2.5k
+      // tokens of thinking to name tiles, and Flash at medium took 3-8 minutes a turn (log
+      // 2026-10-06T17-21-33). Same GEMINI_API_KEY as the voice, from .env
       "provider": "google",
       "model": "gemini-3.8-flash",
-      "effort": "medium",
+      "effort": "low",
       // the display the user watches: without them `playwright-cli open --headed` fails, and
       // the agent fell back to a headless browser nobody saw
       "export": ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR"],

@@ -12,7 +12,8 @@ Core goals
 
 - Turn a game idea into a working LittleJS game quickly.
 - Keep scope right-sized: get a fun playable core loop first, then expand.
-- Work in short iterations: one layer per turn, then suggest the next.
+- Work in small steps: the first turn ends with something to play, and each later turn adds one
+  small thing to it.
 
 Everything for it is in `littlejs/`, in the organization folder. It is read-only: copy out of it,
 never write into it.
@@ -27,28 +28,57 @@ never write into it.
 - `littlejs/examples/`: the starter projects. `littlejs/templates/`: pages to read patterns
   from, and the helper modules.
 
-## Layers
+## Small steps
 
-A game grows in layers, one per turn, after the starter running in the page. Each layer is
-something the user sees work, made with what the engine has for it:
+A five-year-old is waiting, and what keeps them waiting is something to play with. Put it in
+front of them in the first turn, then give them something new in it every minute or two.
 
-1. Scene: the world drawn, standing still: the level's tiles (`TileLayer`), the shapes, the
-   colors.
-2. Controls: the player moves with the keys (`keyDirection`, `keyIsDown`).
-3. Physics: gravity and collisions, the player standing on the world and bumping into it
-   (`TileCollisionLayer`, the engine's object collisions, or Box2D).
-4. Rule: what there is to do, something to hit, dodge, break or collect, and the score.
-5. Particles: hits, breaks and pickups seen (`particleEffect`).
-6. Sound: the same heard (`Sound`, ZzFX).
-7. The game's own features, a layer each: monsters, crafting, a menu, a second level.
+- The first turn ends with the game playable, however rough: the starter copied, and in its
+  `game.js` the player, a plain shape or icon, moving with the keys over a plain world (a grid
+  of colored squares, a road, a floor), with a particle effect when it does something. A few
+  dozen lines.
+- Each later turn is one step on top of that: one thing the user sees or tries, tens of lines,
+  not hundreds. Each engine feature is a step of its own (tiles, physics, a rule and its score,
+  particles, sound, the camera), and so is each of the game's own things, and each detail of
+  one: a rider on the motorcycle is a step, its mirrors another.
+- A change to a value (faster, slower, bigger, another color) is that value: change it, look,
+  end the turn. Nothing rides along with it.
+- Change `game.js` with edits. Writing it whole again means the step is too big.
+- A request that names many things is a plan, not a turn: make its first step, and end the turn
+  with the plan, a line a step. A message that comes in while you work either corrects the step
+  under way, and goes into it, or is another step: put it in the plan, and end the turn with the
+  step under way.
+- A bug that keeps the user from trying the step is part of it; any other goes in the plan.
 
-Make the layer, check it, then end your turn: say what changed and suggest the next layer.
-Never stack layers in one turn, even when the next one is obvious: the user watches the game
-grow and picks where it goes. A request that names many things is many layers: build the first
-one missing, and say which come after. A message that comes in while you work either corrects
-the layer under way, and goes into it, or asks for something else, which is a later layer: say
-you'll do it next, and end the turn with the layer under way. A bug you find while checking a
-layer is part of it.
+End each turn saying what to try, and the next step of the plan. For "a super fast car with a
+gun on top that shoots dynamite with space, a boost on B, and slow cars to race", the first turn
+makes step 1 and ends with this plan:
+
+1. 🏎️ A red car drives on green grass with the arrows, dust behind it. (done: try it)
+2. 🛣️ A gray road loop to drive on.
+3. 🎥 The camera follows the car.
+4. 🧨 Space throws a dynamite forward; it blows up after a second.
+5. 🚗 Two slow cars drive along the road.
+6. 💥 A dynamite that hits a car sends it spinning, with smoke.
+7. 🔥 B: a boost, with fire behind.
+8. 🔊 The engine's and the dynamite's sounds.
+9. 🏁 Laps, and a star for finishing first.
+
+Then the user says "a motorcycle!" while you make step 2: the road goes on, the motorcycle is a
+step in the plan, and the turn ends with the road.
+
+## What costs minutes and gives the user nothing
+
+- Looking around before a new game: other projects, past conversations (`search`), git. A new
+  game starts from the starter and these files.
+- Probing the engine with scripts (`node -e`, python over the typings) for how angles, the
+  camera or screen coordinates go: `littlejs/littlejs-conventions` has them.
+- `deno task build`: the dev server shows the game.
+- Detail nobody asked for: kerbs, tire stacks and grid slots on a track, mirrors and a plate on a
+  motorcycle. Plain shapes first; detail is a step the user picks.
+- A shell lost in another folder: a `cd` stays, so run a project's commands as
+  `(cd projects/<name> && …)` and stay in the organization folder, where the `.playwright-cli/`
+  paths resolve.
 
 ## How a game differs from other web projects
 
@@ -59,8 +89,8 @@ layer is part of it.
   `ui.js`, `constants.js`) as it grows.
 - Feedback: type check with `deno check game.js`, against the engine's typings (the starter's
   `deno.json` turns it on for JavaScript), and lint with `deno lint game.js` and the game's
-  other modules. `deno task build` checks that it bundles; nothing serves its `dist/`, which
-  leaves out the Box2D loader and the images `engineInit` loads. The helper modules in
+  other modules. Not `deno task build`: nothing serves its `dist/`, which leaves out the Box2D
+  loader and the images `engineInit` loads. The helper modules in
   `templates/` are third-party: don't lint, check or review them.
 - Looking up an engine name: `littlejs/reference.md` first, then the engine's typings,
   `node_modules/littlejsengine/dist/littlejs.d.ts`. Never read the engine's source

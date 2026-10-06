@@ -1,11 +1,11 @@
 ---
 kind: skill
-description: Start a brand-new game project — a LittleJS game in projects/<name>/, copied from a starter, served by Vite and shown in the shared browser, as the first of many small layers. TRIGGER on ANY request to make/create/start/build a game when no other engine or framework is named — "make me a pong game", "make a breakout game", "let's build a platformer", "create a card game". When the engine is UNSPECIFIED, LittleJS IS the answer — do not ask which technology to use and do not hand-roll plain Canvas or vanilla JS. But an EXPLICIT choice of stack is always respected — SKIP when the user names any other engine, framework, or approach (Unity, Godot, Phaser, Pygame, GameMaker, Bevy, raw three.js, React, p5.js, or explicitly plain HTML5 Canvas / vanilla JS / "no libraries"), or is editing/extending a game that already exists.
+description: Start a brand-new game project — a LittleJS game in projects/<name>/, copied from a starter, served by Vite and shown in the shared browser, playable at the end of the first turn and grown a small step a turn after it. TRIGGER on ANY request to make/create/start/build a game when no other engine or framework is named — "make me a pong game", "make a breakout game", "let's build a platformer", "create a card game". When the engine is UNSPECIFIED, LittleJS IS the answer — do not ask which technology to use and do not hand-roll plain Canvas or vanilla JS. But an EXPLICIT choice of stack is always respected — SKIP when the user names any other engine, framework, or approach (Unity, Godot, Phaser, Pygame, GameMaker, Bevy, raw three.js, React, p5.js, or explicitly plain HTML5 Canvas / vanilla JS / "no libraries"), or is editing/extending a game that already exists.
 ---
 
 # new-littlejs-game
 
-Start a new LittleJS game by copying the closest **example game** out of `littlejs/`, then grow it a layer at a time, pulling gameplay patterns from the closest **feature template**. The tables below are the answers — don't re-explore `littlejs/` on each new game.
+Start a new LittleJS game by copying the closest **example game** out of `littlejs/`, make it playable, then grow it a small step at a time, pulling gameplay patterns from the closest **feature template**. The tables below are the answers — don't re-explore `littlejs/` on each new game.
 
 **`littlejs/`** is the folder this skill is in, in the organization folder where your shell starts; every `littlejs/` path below is from there. It contains `examples/` (starter game folders, each a project ready to install and serve) and `templates/` (feature references + helper modules). Treat `littlejs/` as **read-only**: never write into it, never scaffold inside it.
 
@@ -85,15 +85,15 @@ Combine rows freely — `gameFx.js` stacks onto any other choice. A template's i
 
 **Never review, verify, or summarize the contents of the engine or of the helper modules you copied** — they are third-party code. The game code you wrote is the only thing that deserves review.
 
-Then serve it and show it, as for any web project, and end the turn there, even when the starter looks nothing like their game: the starter running in the page is the first step. It shows the user that the project is alive, in the window they watch, and leaves them the choice of the first layer. Say what they see, and suggest that layer.
+Then serve it and show it, as for any web project, and in the same turn make it playable: the first step in `littlejs/main.md`, the player moving with the keys over a plain world, with a particle effect. A few dozen lines, plain shapes, rough is fine. End the turn there, with what to try and the plan.
 
-## Step 4 — One layer per turn
+## Step 4 — One step per turn
 
-Each later turn adds one layer, the one the user picked, in the order of the layers in `littlejs/main.md`: scene, controls, physics, rule, particles, sound, then the game's own features one at a time. For a pinball: the table, the flippers, the ball rolling and bouncing, the score. A bug you find while checking a layer is part of it; anything else waits for its own turn. Write it into `game.js` (split into more modules — `player.js`, `ui.js`, `constants.js` — only as it grows; `game.js` imports them). Pull concrete patterns out of the chosen template(s) by reading them from `littlejs/templates/`. Follow the `littlejs/littlejs-conventions` skill for engine rules (imports and setters, engine built-ins, pitfalls).
+Each later turn adds one step of the plan, the next one or the one the user picked, as `littlejs/main.md` sizes them: one thing to see or try, tens of lines, made with edits. For a pinball: a ball falls on the table and the arrows flip two paddles (playable, the first turn), then the ball bounces off the walls, then bumpers, then the score, then sparks on a bumper hit. A bug that keeps the user from trying the step is part of it; any other goes in the plan. Write it into `game.js` (split into more modules — `player.js`, `ui.js`, `constants.js` — only as it grows; `game.js` imports them). Pull concrete patterns out of the chosen template(s) by reading them from `littlejs/templates/`. Follow the `littlejs/littlejs-conventions` skill for engine rules (imports and setters, engine built-ins, pitfalls).
 
-## Step 5 — Check each layer before you end the turn
+## Step 5 — Check each step before you end the turn
 
-A layer is not done on the strength of having written it. Each time, format, lint and type-check it (`deno fmt`, `deno lint game.js`, `deno check game.js`), look at the page and the console as for any web project, and re-read your own `gameInit`/`gameUpdate` for values that silently become `NaN` or `undefined` — save data read with a scalar default is the classic one (see `littlejs/littlejs-conventions`).
+A step is not done on the strength of having written it. Each time, format, lint and type-check it (`deno fmt`, `deno lint game.js`, `deno check game.js`), look at the page and the console as for any web project, and re-read your own `gameInit`/`gameUpdate` for values that silently become `NaN` or `undefined` — save data read with a scalar default is the classic one (see `littlejs/littlejs-conventions`).
 
 If you need to drive the game programmatically to check something, expose a few hooks on `globalThis` from `game.js` for the session and say so in your summary.
 
@@ -116,7 +116,7 @@ engineStep(600); // advance exactly 10 seconds of game time at 60fps
 
 Both flags must be set BEFORE `engineInit`, one `engineStep(n)` runs exactly `n` fixed updates at `timeScale` 1, and `engineStep` respects `paused` the same way the normal loop does. This needs a small harness that loads the engine outside the browser, so reach for it when time-dependent behaviour is the thing in doubt — not for every game. Grep `reference.md` for "Headless testing" via the `littlejs/littlejs-api` skill for the full contract.
 
-Then end the turn: say what changed, how to play it when the controls changed, what you assumed, and the one layer you suggest next.
+Then end the turn: say what to try, what you assumed, and the next step of the plan.
 
 ## Common mistakes
 
