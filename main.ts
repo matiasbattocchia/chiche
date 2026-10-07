@@ -1,10 +1,11 @@
 // main.ts — chiche: boot, wiring, the mic's gate, the meters, teardown.
 //
-// Boot: LANG → liquen (started here, or the one already running) → the mixer unmuted,
-// pw-record → Gemini, with INSTRUCTIONS.md as its system instruction when there is one.
-// Teardown, on Ctrl-C or SIGTERM: close Gemini, stop the audio, close the door (so the hang-up
-// isn't read as unexpected), `liquen stop` and wait for it, close the logs. `--no-liquen` skips
-// liquen and the door: the voice alone, to test the audio; `input` calls get an error. `--say-hi`
+// Boot: LANG → liquen (started here, or the one already running) → the browser, a fresh window
+// → the mixer unmuted, pw-record → Gemini, with INSTRUCTIONS.md as its system instruction when
+// there is one. Teardown, on Ctrl-C or SIGTERM: close Gemini, stop the audio, close the door (so
+// the hang-up isn't read as unexpected), `liquen stop` and wait for it, close the browser, close
+// the logs. `--no-liquen` skips liquen, the door and the browser: the voice alone, to test the
+// audio; `input` calls get an error. `--say-hi`
 // has the voice take the first turn. `--vad` leaves the turns to the server's activity
 // detection: the gate still decides what is sent, and closing it sends silence. `--fresh`
 // starts a new voice session instead of resuming the last run's. `--session <name>` picks the
@@ -76,6 +77,36 @@ function child(cmd: string[], cwd: string, onLine: (line: string) => void) {
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * The organization's playwright-cli, the one the coding agent drives: its `default` session is
+ * the browser window the user watches, whoever opened it.
+ */
+const PLAYWRIGHT = join(DATA, "organization", "bin", "playwright-cli");
+
+/** playwright-cli with `args`, without the API keys in its environment; true when it succeeds. */
+async function playwright(...args: string[]): Promise<boolean> {
+  const env = Deno.env.toObject();
+  delete env.GEMINI_API_KEY;
+  delete env.ANTHROPIC_API_KEY;
+  try {
+    const out = await new Deno.Command(PLAYWRIGHT, {
+      args,
+      env,
+      clearEnv: true,
+      stdin: "null",
+      stdout: "piped",
+      stderr: "piped",
+    }).output();
+    const text = new TextDecoder().decode(out.stdout) + new TextDecoder().decode(out.stderr);
+    const said = text.replace(ANSI, "").replaceAll(/\s+/g, " ").trim();
+    log.line("browser", `${args.join(" ")} → ${out.code}${said ? `: ${clip(said, 300)}` : ""}`);
+    return out.success;
+  } catch (e) {
+    log.line("browser", `${args.join(" ")}: ${(e as Error).message}`);
+    return false;
+  }
+}
 
 // ── boot ────────────────────────────────────────────────────────────────────
 
@@ -267,6 +298,8 @@ async function logTail(): Promise<string | undefined> {
 /** What is up, in boot order; teardown may run before any of it exists. */
 const up: {
   liquen?: Deno.ChildProcess;
+  /** The browser opening, then open when it resolves true. */
+  browser?: Promise<boolean>;
   door?: Door;
   mixer?: { stop(): void };
   audio?: Audio;
@@ -303,6 +336,7 @@ async function teardown(code = 0) {
     if (text) log.line("liquen", text);
     await up.liquen.status.catch(() => {});
   }
+  if (up.browser && await up.browser) await playwright("close");
   log.close();
   term.unpin();
   Deno.exit(code);
@@ -348,6 +382,9 @@ if (noLiquen) {
     }
     if (exited) up.liquen = undefined; // it refused: someone else's run, not ours to stop
   }
+  // 3. the browser: a fresh window for the run, in front of the user before the agent needs it,
+  // and none left from an earlier run with its old tabs. It opens while the rest boots.
+  up.browser = playwright("close").then(() => playwright("open", "--headed", "about:blank"));
 }
 
 // ── the input tool, wired to the door ───────────────────────────────────────
@@ -561,7 +598,7 @@ function update() {
   );
 }
 
-// 3. audio. Two blocks stand between the user and the voice. The mixer's mute (mic and
+// 4. audio. Two blocks stand between the user and the voice. The mixer's mute (mic and
 // speakers) is outside chiche: it clears both at boot, the one thing it does to them, and then
 // only shows them. chiche's gate is the other: closed at boot, it follows the last key used
 // (push to talk down opens it and up closes it, the toggle flips it), and its opening and

@@ -11,8 +11,10 @@ browser window that the user watches with you. `projects/` is not tracked by git
    --template <template> --no-interactive`, then `deno install` in it.
 2. Serve it, unless it is already running: `(cd projects/<name> && deno task dev > vite.log
    2>&1 &)`. Its URL is in `vite.log`. Every change you save shows up in the page by itself.
-3. Show it: `playwright-cli goto <url>`. When `playwright-cli list` has no browser open,
-   `playwright-cli open --headed <url>` first. The user sees this same window: never close it.
+3. Show it: `playwright-cli goto <url>`, as soon as it is served. The browser is open already, a
+   window in front of the user since the session started; only when `playwright-cli list` has
+   none (the user closed it), `playwright-cli open --headed <url>` first. The user sees this same
+   window: never close it.
    If it won't open headed, tell the user and stop there: a browser without `--headed` is one
    nobody sees.
 4. Show what you are doing: `playwright-cli video-show-actions` marks each action on the page,
