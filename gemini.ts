@@ -91,9 +91,9 @@ export interface VoiceOptions {
 
 export const INPUT_TOOL = {
   name: "input",
-  description: "Send a message to the coding agent. It always takes input, even while the " +
-    "agent is working: messages queue up, and the agent picks them up at its next step " +
-    "without stopping what it is doing.",
+  description: "What you will do next, for your hands to start on. They always take it, even " +
+    "while they are at work: messages queue up and are picked up at the next step, without " +
+    "stopping what is under way.",
   behavior: Behavior.NON_BLOCKING,
   parameters: {
     type: Type.OBJECT,
