@@ -8,7 +8,7 @@ Two agents, one to the user: Chiche, who talks and builds web projects in front 
   call.
 - **The coding agent**: a liquen agent (`matias` in `config.jsonc`), reached through its door,
   `data/agents/<agent>/door.sock`. liquen is the harness in `../liquen`. Its shell starts in
-  `data/shared`, and its instructions are `data/shared/instructions/organization.md`.
+  `data/shared`, and its instructions are `data/shared/instructions/main.md`.
 
 They never pass each other's words verbatim: the voice sends what the user wants as input, and
 says what the agent's output means, without code.
@@ -20,5 +20,9 @@ its skills, starter examples and templates.
 
 `data/system` links to `../liquen`'s seed, except `skills`, an empty folder so liquen seeds no
 skills.
+
+`data/shared/projects` is a checkout of its own repo, rubi-games. `deno task publish <project>`
+puts a project on https://rubi.games: `publish/` holds the command and the Worker, which serves
+the projects from a KV namespace and draws its index from their `card.json`.
 
 Run it with `deno task chiche`.

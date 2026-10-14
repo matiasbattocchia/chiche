@@ -1,5 +1,6 @@
 // deno.jsonc — liquen's tasks (its scaffold), plus chiche: `deno task chiche` runs the
-// voice. A liquen checkout stands in for the registry with `"links": ["../liquen"]`.
+// voice, and `deno task publish` puts a project on rubi.games. A liquen checkout stands in
+// for the registry with `"links": ["../liquen"]`.
 {
   "links": ["../liquen"],
   "imports": {
@@ -14,6 +15,10 @@
   },
   "tasks": {
     "chiche": "deno run -A --env-file=.env main.ts",
+    "publish": {
+      "command": "deno run -A publish/main.ts",
+      "description": "a project at https://rubi.games; --help tells the rest"
+    },
     "start": {
       "command": "deno run -A --env-file=.env @liquen/liquen/start",
       "description": "run the org — main and every declared connection; -D in the background"

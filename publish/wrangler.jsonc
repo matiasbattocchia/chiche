@@ -1,0 +1,10 @@
+// rubi — the published projects at https://rubi.games, served from the SITE namespace, which
+// `deno task publish` fills. `deno task publish --site` deploys this Worker
+{
+  "name": "rubi",
+  "main": "worker.ts",
+  "compatibility_date": "2026-10-01",
+  "kv_namespaces": [{ "binding": "SITE", "id": "c6b72fd812fc493180f8f87c28d08358" }],
+  "routes": [{ "pattern": "rubi.games", "custom_domain": true }],
+  "workers_dev": true
+}
