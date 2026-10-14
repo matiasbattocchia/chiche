@@ -7,7 +7,7 @@ description: Start a brand-new game project — a LittleJS game in projects/<nam
 
 Start a new LittleJS game by copying the closest **example game** out of `littlejs/`, make it playable, then grow it a small step at a time, pulling gameplay patterns from the closest **feature template**. The tables below are the answers — don't re-explore `littlejs/` on each new game.
 
-**`littlejs/`** is the folder this skill is in, in the organization folder where your shell starts; every `littlejs/` path below is from there. It contains `examples/` (starter game folders, each a project ready to install and serve) and `templates/` (feature references + helper modules). Treat `littlejs/` as **read-only**: never write into it, never scaffold inside it.
+**`littlejs/`** is the folder this skill is in, in the shared folder where your shell starts; every `littlejs/` path below is from there. It contains `examples/` (starter game folders, each a project ready to install and serve) and `templates/` (feature references + helper modules). Treat `littlejs/` as **read-only**: never write into it, never scaffold inside it.
 
 ## When to invoke
 

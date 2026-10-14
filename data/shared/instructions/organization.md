@@ -22,8 +22,8 @@ browser window that the user watches with you. `projects/` is not tracked by git
 5. Look at the feedback.
 
 `playwright-cli --help [command]` tells the rest. It writes its files (console logs, snapshots,
-screenshots) in `.playwright-cli/` in the organization folder, where your shell starts, whatever
-folder it is in now: the paths it prints are relative to the organization folder.
+screenshots) in `.playwright-cli/` in the shared folder, where your shell starts, whatever
+folder it is in now: the paths it prints are relative to the shared folder.
 
 ## Who it is for
 

@@ -15,7 +15,7 @@ Core goals
 - Work in small steps: the first turn ends with something to play, and each later turn adds one
   small thing to it.
 
-Everything for it is in `littlejs/`, in the organization folder. It is read-only: copy out of it,
+Everything for it is in `littlejs/`, in the shared folder. It is read-only: copy out of it,
 never write into it.
 
 - `littlejs/new-littlejs-game`: the skill for a new game, with which example to copy, which template
@@ -86,7 +86,7 @@ in the plan, and the turn ends with the road.
 - Detail nobody asked for: kerbs, tire stacks and grid slots on a track, mirrors and a plate on a
   motorcycle. Plain shapes first; detail is a step the user picks.
 - A shell lost in another folder: a `cd` stays, so run a project's commands as
-  `(cd projects/<name> && …)` and stay in the organization folder, where the `.playwright-cli/`
+  `(cd projects/<name> && …)` and stay in the shared folder, where the `.playwright-cli/`
   paths resolve.
 
 ## How a game differs from other web projects

@@ -30,7 +30,7 @@ All are pure white, so `drawTile`'s color arg multiplies to any hue. `glow` and 
 
 ## Quick start
 
-1. Wire `textureGenerator.js`. If the project doesn't already contain it, copy it from `littlejs/templates/textureGenerator.js` (in the organization folder, where your shell starts) → the project's `templates/` folder (create it). Then import from it in `game.js`: `import { initDefaultAtlas } from './templates/textureGenerator.js';`.
+1. Wire `textureGenerator.js`. If the project doesn't already contain it, copy it from `littlejs/templates/textureGenerator.js` (in the shared folder, where your shell starts) → the project's `templates/` folder (create it). Then import from it in `game.js`: `import { initDefaultAtlas } from './templates/textureGenerator.js';`.
 
 2. Bake the atlas once in `gameInit` and keep the returned name→TileInfo map:
 

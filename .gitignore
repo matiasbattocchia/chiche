@@ -9,9 +9,9 @@ data/system/*
 !data/system/instructions
 !data/system/tools
 !data/system/skills/
-data/organization/.playwright-cli/
-data/organization/projects/*
-!data/organization/projects/.gitkeep
+data/shared/.playwright-cli/
+data/shared/projects/*
+!data/shared/projects/.gitkeep
 data/agents/*/*
 !data/agents/*/instructions/
 !data/agents/*/skills/

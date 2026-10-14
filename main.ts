@@ -82,7 +82,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * The organization's playwright-cli, the one the coding agent drives: its `default` session is
  * the browser window the user watches, whoever opened it.
  */
-const PLAYWRIGHT = join(DATA, "organization", "bin", "playwright-cli");
+const PLAYWRIGHT = join(DATA, "shared", "bin", "playwright-cli");
 
 /** playwright-cli with `args`, without the API keys in its environment; true when it succeeds. */
 async function playwright(...args: string[]): Promise<boolean> {
@@ -507,8 +507,8 @@ function become(next: typeof state) {
 }
 
 if (!noLiquen) {
-  // the coding agent's shell starts in the org's folder
-  up.door = await Door.connect(DATA, user, sessionName, join(DATA, "organization"), {
+  // the coding agent's shell starts in the shared folder
+  up.door = await Door.connect(DATA, user, sessionName, join(DATA, "shared"), {
     trace: (d, m) => log.door(d, m),
     event(e) {
       if (toolUseOf(e)) return become("working");

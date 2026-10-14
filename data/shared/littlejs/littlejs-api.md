@@ -5,7 +5,7 @@ description: Use when you need the exact signature, parameter order, defaults, o
 
 # littlejs-api
 
-The curated LittleJS API reference is beside this skill, in the organization folder where your shell starts:
+The curated LittleJS API reference is beside this skill, in the shared folder where your shell starts:
 
 `littlejs/reference.md`
 
