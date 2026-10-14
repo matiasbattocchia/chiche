@@ -1,5 +1,22 @@
 #!/bin/sh
 # Microsoft's Playwright CLI, pinned, run by Deno from the org's folder: wherever it is
-# called, it reads .playwright/cli.config.json and writes .playwright-cli/ there.
+# called, it reads .playwright/cli.config.json and writes .playwright-cli/ there. A file named
+# with --filename lands in .playwright-cli/ too, unless its path is absolute or already there.
 cd "$(dirname "$0")/.." || exit 1
+out() {
+  case $1 in
+    /* | .playwright-cli/*) printf %s "$1" ;;
+    *) printf .playwright-cli/%s "${1#./}" ;;
+  esac
+}
+n=$# next=
+for a; do
+  if [ "$next" ]; then a=$(out "$a") next=; fi
+  case $a in
+    --filename) next=1 ;;
+    --filename=*) a=--filename=$(out "${a#--filename=}") ;;
+  esac
+  set -- "$@" "$a"
+done
+shift "$n"
 exec deno run -A --no-lock npm:@playwright/cli@0.1.22 "$@"

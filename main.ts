@@ -83,6 +83,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * the browser window the user watches, whoever opened it.
  */
 const PLAYWRIGHT = join(DATA, "shared", "bin", "playwright-cli");
+/** Where it writes its files: console logs, snapshots, screenshots. */
+const PLAYWRIGHT_OUT = join(DATA, "shared", ".playwright-cli");
 
 /** playwright-cli with `args`, without the API keys in its environment; true when it succeeds. */
 async function playwright(...args: string[]): Promise<boolean> {
@@ -383,8 +385,21 @@ if (noLiquen) {
     if (exited) up.liquen = undefined; // it refused: someone else's run, not ours to stop
   }
   // 3. the browser: a fresh window for the run, in front of the user before the agent needs it,
-  // and none left from an earlier run with its old tabs. It opens while the rest boots.
-  up.browser = playwright("close").then(() => playwright("open", "--headed", "about:blank"));
+  // and none left from an earlier run with its old tabs, nor its files: the console logs,
+  // snapshots and screenshots in .playwright-cli/ are this run's. It opens while the rest boots.
+  up.browser = playwright("close").then(async () => {
+    try {
+      for await (const e of Deno.readDir(PLAYWRIGHT_OUT)) {
+        await Deno.remove(join(PLAYWRIGHT_OUT, e.name), { recursive: true });
+      }
+    } catch (e) {
+      // none yet, or not ours to remove: the window opens all the same
+      if (!(e instanceof Deno.errors.NotFound)) {
+        term.error(`.playwright-cli/: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+    return playwright("open", "--headed", "about:blank");
+  });
 }
 
 // ── the input tool, wired to the door ───────────────────────────────────────

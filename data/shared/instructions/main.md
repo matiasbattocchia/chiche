@@ -28,8 +28,9 @@ escape." }`, a picture and a few words in the user's language. It is what shows 
 among the others.
 
 `playwright-cli --help [command]` tells the rest. It writes its files (console logs, snapshots,
-screenshots) in `.playwright-cli/` in the shared folder, where your shell starts, whatever
-folder it is in now: the paths it prints are relative to the shared folder.
+screenshots, and a file you name with `--filename`) in `.playwright-cli/` in the shared folder,
+where your shell starts, whatever folder it is in now: the paths it prints are relative to the
+shared folder. The folder starts empty with each session.
 
 ## Who it is for
 
