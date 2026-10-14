@@ -427,6 +427,24 @@ let doorGone = false;
  * WHEN_IDLE answer, so the voice tells the user that both of them are still there.
  */
 const UPDATE_QUIET_MS = 30_000;
+/**
+ * After a result, when nobody has spoken for this long and nothing was sent, the next step of
+ * the plan goes to the coding agent by itself, with its default, and the voice hears of it as a
+ * `sent:` line. Once per quiet stretch: a result starts a new one. The voice is told to send the
+ * next step at once (INSTRUCTIONS.md), and in prueba4 (log/2026-10-13T22-54-52) it did so by
+ * itself at one result in fifteen: at the others it announced the step or asked about it and
+ * waited, 65–191 s, until the user asked what happened.
+ */
+const GO_ON_QUIET_MS = 45_000;
+/**
+ * How many steps go by themselves in a row with no word from the user: a bound on working
+ * alone, a few minutes of it, after which the next step waits for the user.
+ */
+const GO_ON_MAX = 3;
+/** The quiet stretch since the last result already had its send. */
+let wentOn = false;
+/** Steps sent by themselves since the user last spoke. */
+let alone = 0;
 /** Last time anyone spoke: the mic opening or closing, the voice's audio, a turn completing. */
 let lastTalk = performance.now();
 
@@ -453,6 +471,7 @@ function trouble(error: string): string {
 function failed(error: string) {
   concluded = true;
   awaiting = false;
+  wentOn = true; // no step goes by itself after an error: a quota used up would get a retry
   term.dim(`agent error: ${clip(error.replaceAll("\n", " "), 200)}`);
   forward(trouble(error), Scheduling.WHEN_IDLE);
 }
@@ -499,6 +518,7 @@ if (!noLiquen) {
       if (up.door && isReply(e, up.door.address)) {
         concluded = true;
         awaiting = false;
+        wentOn = false;
         return forward(`result: ${textOf(e)}`, Scheduling.WHEN_IDLE);
       }
       const error = errorOf(e);
@@ -545,20 +565,13 @@ if (!noLiquen) {
   });
 }
 
-async function input(callId: string, text: string) {
-  // the newer call is the channel from here on; the older one is left open, with nothing
-  // more to carry (whether the model minds a call never closed is not measured yet)
-  channel = callId;
+/** A message to the coding agent, and what the door said of it. */
+async function send(text: string) {
   term.dim(`input: ${text.trim()}`);
   chat(`input: ${text}`);
   const r = up.door
     ? await up.door.message(text)
     : { ok: false, id: undefined, error: "the coding agent is off (chiche runs with --no-liquen)" };
-  if (channel !== callId) return; // cancelled or superseded meanwhile
-  // once the voice has spoken this turn, WHEN_IDLE would have it speak again once it's idle
-  // (measured: a second answer 0.44 s after the first ended); before it has, WHEN_IDLE is what
-  // makes it speak at all (measured: a turn that was only the call, and the user's run
-  // log/2026-09-25T17-45-59, where a SILENT "sent" left the user with nothing)
   if (r.ok && typeof r.id === "string") {
     term.dim(`sent (${r.id.slice(-6)})`);
     awaiting = true;
@@ -568,17 +581,34 @@ async function input(callId: string, text: string) {
       busySince ??= performance.now();
       concluded = false;
     }
+  } else term.dim(`not sent: ${r.error}`);
+  return r;
+}
+
+async function input(callId: string, text: string) {
+  // the newer call is the channel from here on; the older one is left open, with nothing
+  // more to carry (whether the model minds a call never closed is not measured yet)
+  channel = callId;
+  alone = 0;
+  const r = await send(text);
+  if (channel !== callId) return; // cancelled or superseded meanwhile
+  // once the voice has spoken this turn, WHEN_IDLE would have it speak again once it's idle
+  // (measured: a second answer 0.44 s after the first ended); before it has, WHEN_IDLE is what
+  // makes it speak at all (measured: a turn that was only the call, and the user's run
+  // log/2026-09-25T17-45-59, where a SILENT "sent" left the user with nothing)
+  if (r.ok && typeof r.id === "string") {
     up.voice?.answer({
       id: callId,
       output: "sent",
       scheduling: unlessSpoken(),
       willContinue: true,
     });
-  } else {
-    term.dim(`not sent: ${r.error}`);
-    forward(`error: ${r.error ?? "not sent"}`, unlessSpoken(), false);
-  }
+  } else forward(`error: ${r.error ?? "not sent"}`, unlessSpoken(), false);
 }
+
+/** Nobody is speaking or about to: the mic is shut, the voice is neither answering nor owed one. */
+const quiet = () =>
+  !open && !closing && !held && !answering && waitingSince === undefined && !up.audio?.playing;
 
 /**
  * An update while the coding agent is busy, when nobody has spoken for a while
@@ -586,14 +616,37 @@ async function input(callId: string, text: string) {
  */
 function update() {
   const now = performance.now();
-  if (
-    busySince === undefined || !channel || open || closing || held || answering ||
-    waitingSince !== undefined || up.audio?.playing || now - lastTalk < UPDATE_QUIET_MS
-  ) return;
+  if (busySince === undefined || !channel || !quiet() || now - lastTalk < UPDATE_QUIET_MS) return;
   lastTalk = now; // the next one after another quiet stretch, whether the voice speaks or not
   const s = Math.round((now - busySince) / 1000);
   forward(
     `update: still ${state === "idle" ? "busy" : state}, ${s} s in`,
+    Scheduling.WHEN_IDLE,
+  );
+}
+
+/**
+ * The next step of the plan, sent by itself: the coding agent answered, and nobody has spoken
+ * nor sent anything since for a while (GO_ON_QUIET_MS).
+ */
+async function goOn() {
+  const now = performance.now();
+  if (
+    doorGone || !channel || !concluded || awaiting || doorBusy || state !== "idle" || wentOn ||
+    alone >= GO_ON_MAX || !quiet() || now - lastTalk < GO_ON_QUIET_MS
+  ) return;
+  wentOn = true;
+  alone++;
+  const s = Math.round((now - lastTalk) / 1000);
+  const r = await send(
+    `The user has been quiet for ${s} s. Go on with the next step of the plan, with your ` +
+      "default for its choice.",
+  );
+  forward(
+    r.ok
+      ? `sent: the user was quiet for ${s} s, so the next step of the plan went by itself, ` +
+        "with its default"
+      : `error: ${r.error ?? "not sent"}`,
     Scheduling.WHEN_IDLE,
   );
 }
@@ -687,6 +740,7 @@ function mic(now: boolean, why: string, push = false) {
   open = now;
   lastTalk = performance.now();
   if (open) {
+    alone = 0; // the user speaks: the steps that went by themselves start over
     const released = held?.at ?? (closing?.push ? closing.at : undefined);
     if (push && released !== undefined) {
       clearTimeout(held?.timer);
@@ -877,7 +931,10 @@ function status() {
 }
 term.pin(noLiquen ? 2 : 3);
 up.status = setInterval(status, STATUS_MS);
-up.updates = setInterval(update, 1000);
+up.updates = setInterval(() => {
+  update();
+  goOn();
+}, 1000);
 
 /**
  * The run ends, and the session will be resumed: the work still open is answered as stopped
@@ -1005,7 +1062,16 @@ up.voice = await Voice.start({
       endSilence("the transcript came");
       term.say("🧒", t, finished);
     },
-    outputTranscript(t, finished) {
+    outputTranscript(t, finished, withAudio) {
+      // the transcriber runs on after the voice: a chunk with no audio, after the last one with
+      // it, that opens with dashes, a star or a bracket is its own ("--- ---", an English
+      // answer about prompts, in log/2026-10-13T22-54-52). Across the logs to 2026-10-13, 6 of
+      // ~2300 chunks came with no audio: 5 such, and 1 the tail of the sentence, which opens
+      // with a letter
+      if (!withAudio && !/^\s*\p{L}/u.test(t)) {
+        log.line("gem", `transcript dropped (no audio): ${clip(t.replaceAll("\n", "⏎"), 80)}`);
+        return;
+      }
       answered("transcript");
       term.say("🗣️", t, finished);
     },

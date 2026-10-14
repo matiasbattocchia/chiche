@@ -124,6 +124,39 @@ in the plan, and the turn ends with the road.
   `collideWithTile(tileData, pos)` for tile collision.
 - Persisted settings and stats go through `readSaveData` / `writeSaveData`.
 
+## Controls and devices
+
+The game is played on the laptop with the keyboard, on a phone or a tablet with two thumbs, and with
+a gamepad: one game, three ways in. Build for the phone first: what works under two thumbs works
+everywhere.
+
+- A game is moving and at most four actions. Moving is `keyDirection()` (the arrows and WASD) or
+  `gamepadStick(0)` (a gamepad's left stick, and the touch gamepad's, which is gamepad 0 once
+  touched): take whichever isn't zero. An action is one key and one gamepad button, 0 to 3, read
+  together in one place: `keyWasPressed('KeyC') || gamepadWasPressed(0)`. The touch gamepad's
+  right-side buttons are those same buttons, 0 to 3: `setTouchGamepadButtonCount(n)` with the game's
+  number of actions (1 is a single large button).
+- The same key for a thing and its undoing (in and out of the tank), one key at a time (no two
+  together), none that moving uses (the arrows, W A S D), keys near each other. A request that
+  brings a fifth action or a key that clashes gets the warning in the result, with the fix you
+  propose: the user can't see the clash.
+- A game with moving or more than one action turns the touch gamepad on in `gameInit`:
+  `setTouchGamepadEnable(true)`, and `setTouchGamepadDisplayTime(0)` so it stays on screen. A game
+  with a single action and no moving (tap to flap) takes a tap instead, `mouseWasPressed(0)` beside
+  its key, since a touch is a mouse to the engine, and no touch gamepad.
+- The key drawn on screen beside an action's icon is the device's: the key's letter while the
+  keyboard was used last (`usingKeyboardInput()`), the button's number, 0 to 3, on a touch device
+  (`isTouchDevice`) or with a gamepad (`usingGamepadInput()`).
+- Lay the game out for a tall, narrow screen first: the phone held upright, and the laptop window
+  beside the terminal. The canvas takes the window's size, so keep the playfield whole with
+  `setCameraScale(min(mainCanvasSize.x / viewW, mainCanvasSize.y / viewH))` each frame. On touch the
+  gamepad overlay covers the bottom of the screen on both sides: the HUD goes at the top, and
+  nothing the player must see sits in the bottom corners. A game that needs width (a side-scroller,
+  a road to race along) is a landscape game: say so in the result, so the user turns the phone.
+- A step about touch or layout is tried as a phone too, in a second window of its own session:
+  `playwright-cli -s=phone open --headed --mobile <url>`. It is closed when done, with
+  `playwright-cli -s=phone close`; the user's window stays.
+
 ## Helper modules
 
 They are not part of the engine. To use one, copy it from `littlejs/templates/` into the project's

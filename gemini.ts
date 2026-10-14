@@ -62,7 +62,8 @@ export interface VoiceEvents {
   audio(pcm: Uint8Array): void;
   interrupted(): void;
   inputTranscript(text: string, finished: boolean): void;
-  outputTranscript(text: string, finished: boolean): void;
+  /** `withAudio`: the message carried audio too, as nearly every transcript chunk's does. */
+  outputTranscript(text: string, finished: boolean, withAudio: boolean): void;
   turnComplete(): void;
   toolCall(call: ToolCall): void;
   toolCallCancelled(ids: string[]): void;
@@ -357,14 +358,22 @@ export class Voice {
     const c = m.serverContent;
     if (c) {
       if (c.interrupted) on.interrupted();
+      let audio = false;
       for (const part of c.modelTurn?.parts ?? []) {
-        if (part.inlineData?.data) on.audio(decodeBase64(part.inlineData.data));
+        if (part.inlineData?.data) {
+          audio = true;
+          on.audio(decodeBase64(part.inlineData.data));
+        }
       }
       if (c.inputTranscription?.text) {
         on.inputTranscript(c.inputTranscription.text, c.inputTranscription.finished ?? false);
       }
       if (c.outputTranscription?.text) {
-        on.outputTranscript(c.outputTranscription.text, c.outputTranscription.finished ?? false);
+        on.outputTranscript(
+          c.outputTranscription.text,
+          c.outputTranscription.finished ?? false,
+          audio,
+        );
       }
       if (c.turnComplete) on.turnComplete();
     }
