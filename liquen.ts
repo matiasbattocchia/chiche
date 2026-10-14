@@ -1,5 +1,5 @@
 // liquen.ts — the door client. Speaks liquen's door protocol directly (../liquen/src/door.ts):
-// newline-separated JSON over data/agents/<user>/door.sock, requests answered in order, and
+// newline-separated JSON over data/agents/<agent>/door.sock, requests answered in order, and
 // after a `tail` the same connection pushes {event}, {delta} and {status} lines. A line with
 // `ok` is a reply; anything else is a push. Every request names the session (`mind` unless
 // chiche runs with --session), so `liquen repl --session <name>` shows the same room.
@@ -47,7 +47,7 @@ export interface DoorEvents {
 }
 
 export class Door {
-  readonly user: string;
+  readonly agent: string;
   readonly session: string;
   #conn: Deno.UnixConn;
   #on: DoorEvents;
@@ -55,8 +55,8 @@ export class Door {
   #writes: Promise<void> = Promise.resolve();
   #closing = false;
 
-  private constructor(user: string, session: string, conn: Deno.UnixConn, on: DoorEvents) {
-    this.user = user;
+  private constructor(agent: string, session: string, conn: Deno.UnixConn, on: DoorEvents) {
+    this.agent = agent;
     this.session = session;
     this.#conn = conn;
     this.#on = on;
@@ -68,9 +68,9 @@ export class Door {
     });
   }
 
-  /** The socket of `<user>`'s agent under `dir` (liquen's data folder). */
-  static socket(dir: string, user: string) {
-    return `${dir}/agents/${user}/door.sock`;
+  /** The socket of `agent` under `dir` (liquen's data folder). */
+  static socket(dir: string, agent: string) {
+    return `${dir}/agents/${agent}/door.sock`;
   }
 
   /** Connect and `tail` `session` (naming it is what births it); throws when nothing answers.
@@ -78,13 +78,13 @@ export class Door {
    *  `shell` (liquen's shell keeps its directory between commands). */
   static async connect(
     dir: string,
-    user: string,
+    agent: string,
     session: string,
     shell: string,
     on: DoorEvents,
   ): Promise<Door> {
-    const conn = await Deno.connect({ transport: "unix", path: Door.socket(dir, user) });
-    const door = new Door(user, session, conn, on);
+    const conn = await Deno.connect({ transport: "unix", path: Door.socket(dir, agent) });
+    const door = new Door(agent, session, conn, on);
     const t = await door.request({ op: "tail", session, cwd: shell });
     if (!t.ok) {
       door.close();
@@ -94,9 +94,9 @@ export class Door {
   }
 
   /** Whether a door answers on the socket right now. */
-  static async answers(dir: string, user: string): Promise<boolean> {
+  static async answers(dir: string, agent: string): Promise<boolean> {
     try {
-      const conn = await Deno.connect({ transport: "unix", path: Door.socket(dir, user) });
+      const conn = await Deno.connect({ transport: "unix", path: Door.socket(dir, agent) });
       conn.close();
       return true;
     } catch {
@@ -104,9 +104,9 @@ export class Door {
     }
   }
 
-  /** The coding agent's conversation: `<session>@<user>`. */
+  /** The coding agent's conversation: `<session>@<agent>`. */
   get address() {
-    return `${this.session}@${this.user}`;
+    return `${this.session}@${this.agent}`;
   }
 
   request(req: Record<string, unknown>): Promise<Reply> {
@@ -119,13 +119,13 @@ export class Door {
     return reply;
   }
 
-  /** A message from the principal to the coding agent's session → `{ok, id}`. */
-  message(text: string): Promise<Reply> {
+  /** A message from the principal, signed `sender`, to the coding agent's session → `{ok, id}`. */
+  message(text: string, sender: string): Promise<Reply> {
     return this.request({
       op: "message",
       text,
       session: this.session,
-      sender: { address: this.user, name: this.user },
+      sender: { address: sender, name: sender },
     });
   }
 

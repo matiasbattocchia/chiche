@@ -6,9 +6,10 @@ Two agents, one to the user: Chiche, who talks and builds web projects in front 
   `LANG` names. Its system prompt is `INSTRUCTIONS.md`, with `{{LANG}}` filled in. It reaches
   the coding agent with the `input` tool; the agent's output comes back on the newest open
   call.
-- **The coding agent**: a liquen agent (`matias` in `config.jsonc`), reached through its door,
-  `data/agents/<agent>/door.sock`. liquen is the harness in `../liquen`. Its shell starts in
-  `data/shared`, and its instructions are `data/shared/instructions/main.md`.
+- **The coding agent**: a liquen agent, `chiche` in `config.jsonc`, the same whoever runs it,
+  reached through its door, `data/agents/chiche/door.sock`. liquen is the harness in
+  `../liquen`. Its shell starts in `data/shared`, and its instructions are
+  `data/shared/instructions/main.md`.
 
 They never pass each other's words verbatim: the voice sends what the user wants as input, and
 says what the agent's output means, without code.

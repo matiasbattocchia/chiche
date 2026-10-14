@@ -112,6 +112,9 @@ async function playwright(...args: string[]): Promise<boolean> {
 
 // ── boot ────────────────────────────────────────────────────────────────────
 
+/** The coding agent, the same one whoever runs chiche: `chiche` in config.jsonc. */
+const AGENT = "chiche";
+/** Who speaks to it, as the agent sees its messages signed: the login running chiche. */
 const user = Deno.env.get("USER") ?? (await import("node:os")).userInfo().username;
 const language = languageOf(Deno.env.get("LANG"));
 const apiKey = Deno.env.get("GEMINI_API_KEY");
@@ -348,7 +351,7 @@ for (const sig of ["SIGINT", "SIGTERM"] as const) {
 }
 
 // 1. the language is settled above; 2. liquen
-log.line("boot", `LANG=${Deno.env.get("LANG")} → ${language}, user ${user}`);
+log.line("boot", `LANG=${Deno.env.get("LANG")} → ${language}, user ${user}, agent ${AGENT}`);
 if (vad) {
   term.dim("--vad: the server's activity detection takes the turns");
   log.line("boot", "--vad");
@@ -357,8 +360,8 @@ if (noLiquen) {
   term.dim("--no-liquen: no coding agent");
   log.line("boot", "--no-liquen");
 } else {
-  const socket = Door.socket(DATA, user);
-  if (await Door.answers(DATA, user)) {
+  const socket = Door.socket(DATA, AGENT);
+  if (await Door.answers(DATA, AGENT)) {
     term.dim(`liquen already runs (${socket}); using it`);
     log.line("boot", "liquen already running");
   } else {
@@ -366,10 +369,10 @@ if (noLiquen) {
     const deadline = Date.now() + LIQUEN_BOOT_MS;
     let exited: Deno.CommandStatus | undefined;
     up.liquen.status.then((s) => exited = s);
-    while (!(await Door.answers(DATA, user))) {
+    while (!(await Door.answers(DATA, AGENT))) {
       if (exited) {
         // a refusal because the org already runs is fine: its door is the one we want
-        if (await Door.answers(DATA, user)) break;
+        if (await Door.answers(DATA, AGENT)) break;
         term.error(
           `liquen start exited with ${exited.code} before its door answered; see ${log.dir}/timeline.log`,
         );
@@ -523,7 +526,7 @@ function become(next: typeof state) {
 
 if (!noLiquen) {
   // the coding agent's shell starts in the shared folder
-  up.door = await Door.connect(DATA, user, sessionName, join(DATA, "shared"), {
+  up.door = await Door.connect(DATA, AGENT, sessionName, join(DATA, "shared"), {
     trace: (d, m) => log.door(d, m),
     event(e) {
       if (toolUseOf(e)) return become("working");
@@ -585,7 +588,7 @@ async function send(text: string) {
   term.dim(`input: ${text.trim()}`);
   chat(`input: ${text}`);
   const r = up.door
-    ? await up.door.message(text)
+    ? await up.door.message(text, user)
     : { ok: false, id: undefined, error: "the coding agent is off (chiche runs with --no-liquen)" };
   if (r.ok && typeof r.id === "string") {
     term.dim(`sent (${r.id.slice(-6)})`);
