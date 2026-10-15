@@ -39,7 +39,7 @@ import {
   setMenuVisibilityCallback,
   setPlaying,
   showMenu,
-} from "./menus.js";
+} from "./menus.ts";
 import {
   _cardSprites,
   Card,
@@ -57,7 +57,7 @@ import {
   shuffledDeck,
   tweeningCardsInDealOrder,
   updateCardTweens,
-} from "./cards.js";
+} from "./cards.ts";
 
 // engine settings
 setCanvasClearColor(new Color().setHex("#264d40")); // felt green
@@ -65,7 +65,7 @@ setCanvasClearColor(new Color().setHex("#264d40")); // felt green
 ///////////////////////////////////////////////////////////////////////////////
 // PLAYING CARDS TEMPLATE
 //
-// A rules-free starter for a card game built on templates/cards.js. It shows
+// A rules-free starter for a card game built on templates/cards.ts. It shows
 // how to use the shared model layer:
 //   shuffledDeck()       — build a shuffled 52-card deck of Card instances
 //   CardStack(pos, type, offsetFn) — a pile; offsetFn fans cards downward
@@ -74,7 +74,7 @@ setCanvasClearColor(new Color().setHex("#264d40")); // felt green
 //   drawCard / drawCardBack         — render face-up / face-down (Card.faceUp)
 //   drawCardSlot(pos)               — empty-slot outline
 //   CardHistory({serialize, deserialize, persist}) — undo/redo, autosaved
-//       through persist, menus.js's saveData here
+//       through persist, menus.ts's saveData here
 //
 // There are NO legality rules — you can drag any card onto any pile. Add your
 // own isMoveLegal()/win check on top of this skeleton to make a real game.
@@ -192,7 +192,7 @@ function newGame() {
   history.reset();
 }
 
-// Topmost card / empty stack under `worldPoint` (see cardAtPoint in cards.js).
+// Topmost card / empty stack under `worldPoint` (see cardAtPoint in cards.ts).
 function stackUnderPoint(worldPoint) {
   return cardAtPoint(stacks, worldPoint);
 }
@@ -385,7 +385,7 @@ function gameUpdatePost() {
 ///////////////////////////////////////////////////////////////////////////////
 function drawAnyCard(c, pos, tint) {
   // Mid-flip: squeeze the width toward 0 and show the old face until the thin
-  // point, the new face after. flipScaleX()/flipFaceUp() come from cards.js.
+  // point, the new face after. flipScaleX()/flipFaceUp() come from cards.ts.
   const opts = { tint };
   let faceUp = c.faceUp;
   if (c.isFlipping()) {
@@ -399,7 +399,7 @@ function drawAnyCard(c, pos, tint) {
 function gameRender() {
   if (!stacks.length) return;
 
-  // Empty-slot outlines (back layer) — see cardSlotVisible() in cards.js.
+  // Empty-slot outlines (back layer) — see cardSlotVisible() in cards.ts.
   for (const s of stacks) {
     if (cardSlotVisible(s)) {
       drawCardSlot(s.pos);

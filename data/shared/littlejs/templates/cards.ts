@@ -1,9 +1,9 @@
 // @ts-nocheck — third-party helper, its errors are not the game's
 // =============================================================================
-// templates/cards.js
+// templates/cards.ts
 // Procedural sprite atlas + render helpers for a standard 52-card deck.
 //
-// Requires textureGenerator.js (initDrawToTexture / drawToTexture / TileInfo).
+// Requires textureGenerator.ts (initDrawToTexture / drawToTexture / TileInfo).
 //
 // Usage:
 //   initCardAtlas();                  // once in gameInit
@@ -38,7 +38,7 @@ import {
   drawToTexture,
   initDrawToTexture,
   whitenAtlasAlpha,
-} from "./textureGenerator.js";
+} from "./textureGenerator.ts";
 
 // --- Public constants ---
 
@@ -527,7 +527,7 @@ export function _drawPips(
 //   updateCardTweens(allStacks);                       // once per frame
 //   drawCardSlot(pos, isFoundation);                   // empty-slot outline
 //   const history = new CardHistory({serialize, deserialize});
-//   persist: saveData (from menus.js) in that object autosaves each move too
+//   persist: saveData (from menus.ts) in that object autosaves each move too
 // =============================================================================
 
 // A single card with built-in move-tween animation. `faceUp` is honored by
@@ -829,13 +829,13 @@ export function tweeningCardsInDealOrder(stacks) {
 
 // Undo/redo + autosave for a card game. The game supplies `serialize()`
 // (current state -> plain object) and `deserialize(snap)` (apply a snapshot).
-// Snapshots persist through `persist` (e.g. menus.js saveData) under `saveKey`
+// Snapshots persist through `persist` (e.g. menus.ts saveData) under `saveKey`
 // when it is given, so a reload can restore the latest position.
 export class CardHistory {
   constructor(
     { serialize, deserialize, saveKey = "saveState", cap = 500, persist },
   ) {
-    this.persist = persist; // optional, e.g. saveData from menus.js
+    this.persist = persist; // optional, e.g. saveData from menus.ts
     this.serialize = serialize;
     this.deserialize = deserialize;
     this.saveKey = saveKey;

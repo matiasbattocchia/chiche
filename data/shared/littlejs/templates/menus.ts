@@ -181,7 +181,7 @@
 // Audio integration (LittleJS Sound + setMenuSounds)
 // ----------------------------------------------------------------------------
 //
-// menus.js doesn't know how to play sounds itself — wire it via setMenuSounds
+// menus.ts doesn't know how to play sounds itself — wire it via setMenuSounds
 // once in gameInit. The shape:
 //
 //   const sound_select   = new Sound([.5,,910,,,.02,2,...]);   // zzfx params
@@ -1429,7 +1429,7 @@ export function clearSubmenuStack() {
 //   stop();                                                // disable
 //
 // Reveal triggers on any document click, Space, or Enter — except on the
-// menus.js root (so clicks inside a different visible menu don't bubble in).
+// menus.ts root (so clicks inside a different visible menu don't bubble in).
 // Self-cancels while the menu is already visible. The optional `canReveal`
 // predicate lets callers gate reveal on game state (e.g. only during the
 // title screen) so the listener can stay attached for the whole game.
@@ -2320,7 +2320,7 @@ export let selectedEl = null;
 // Pointer-mode opens have no initial selection so the cursor doesn't drag a
 // stale outline around; the first keyboard/gamepad input brings it back.
 // Tracked via document-level listeners so it stays correct even when game
-// code (not menus.js) opens a menu in response to Esc / Start.
+// code (not menus.ts) opens a menu in response to Esc / Start.
 export let inputModality = "pointer";
 
 // Left-stick repeat state for menu navigation.
@@ -2463,7 +2463,7 @@ button.ljs-menu-item, input.ljs-menu-item {
    :focus-visible after the synthesized click (and our blur() inside
    wireActivate doesn't reliably clear it on every browser), which
    leaves an outline stuck on a tapped toggle. .ljs-selected is set
-   explicitly by menus.js's own arrow/d-pad nav code and cleared on
+   explicitly by menus.ts's own arrow/d-pad nav code and cleared on
    any pointer interaction, so we get a consistent indicator across
    mouse, touch, and gamepad without depending on browser heuristics. */
 /* Gate all :hover rules on a hover-capable device. iOS Safari (and most
@@ -2825,7 +2825,7 @@ export function initMenuSystem() {
 
   // LittleJS defaults its debug overlay to the Escape key, which collides
   // with the pause/dismiss flow this menu system relies on. Move it to
-  // backtick (~) automatically so games that load menus.js don't have to.
+  // backtick (~) automatically so games that load menus.ts don't have to.
   if (
     typeof setDebugKey === "function" &&
     typeof debugKey !== "undefined" && debugKey === "Escape"

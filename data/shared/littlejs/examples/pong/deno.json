@@ -1,9 +1,5 @@
 {
   "minimumDependencyAge": { "age": "P1D", "exclude": ["npm:littlejsengine"] },
-  "compilerOptions": {
-    "checkJs": true,
-    "strict": false,
-    "noImplicitOverride": false
-  },
+  "compilerOptions": { "strict": true, "lib": ["dom", "dom.iterable", "esnext"] },
   "fmt": { "exclude": ["dist/"] }
 }

@@ -1,6 +1,6 @@
 // @ts-nocheck — third-party helper, its errors are not the game's
 ///////////////////////////////////////////////////////////////////////////////
-// gameAI.js — generic AI strategies for turn-based two-player games.
+// gameAI.ts — generic AI strategies for turn-based two-player games.
 //
 // Usage:
 //   const game = {

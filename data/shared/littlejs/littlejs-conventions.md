@@ -5,19 +5,19 @@ description: LittleJS game engine (littlejsengine) conventions — REQUIRED befo
 
 # LittleJS engine conventions
 
-A LittleJS game here is an ES module: `index.html` loads `<script type=module src=game.js></script>`, and `game.js` imports what it uses from the engine package — `import { engineInit, vec2, drawTile } from 'littlejsengine';` — then calls them by name, no `LJS.` prefix. There is no engine `<script>` tag; Vite serves the import from the project's `node_modules`.
+A LittleJS game here is an ES module: `index.html` loads `<script type=module src=game.ts></script>`, and `game.ts` imports what it uses from the engine package — `import { engineInit, vec2, drawTile } from 'littlejsengine';` — then calls them by name, no `LJS.` prefix. There is no engine `<script>` tag; Vite serves the import from the project's `node_modules`.
 
 ## Startup and structure
 
 - `engineInit(gameInit, gameUpdate, gameUpdatePost, gameRender, gameRenderPost, imageSources)` starts the engine — define all five callbacks even if some are empty. `gameInit` may be `async`; the engine awaits it (put `await box2dInit()` at the top of a Box2D game).
 - Model entities as classes extending `EngineObject` — the engine updates, moves, collides, and renders them automatically every frame:
 
-```javascript
+```ts
 class Player extends EngineObject {
-  constructor(pos) {
+  constructor(pos: Vector2) {
     super(pos, vec2(1), tile(0), 0, CYAN); // pos, size, tileInfo, angle, color
   }
-  update() {
+  override update() {
     this.velocity = keyDirection().scale(.2); // arrows/WASD move the player
     // engine applies physics (velocity, gravity, collision) after update()
     // no super.update() call is needed
@@ -29,10 +29,10 @@ Spawn once in `gameInit` with `new Player(vec2(0))`; it draws itself — no manu
 
 - Seen from above, something that turns and drives forward (a car, a boat, a ship): angle 0 faces up (+Y) and a positive angle turns clockwise, to the right, and `vec2().setAngle(angle, length)` points where the angle does. Draw it facing up and it turns with `this.angle`; `setCameraPos(car.pos)` in `gameUpdatePost` follows it.
 
-```javascript
+```ts
 class Car extends EngineObject {
   speed = 0;
-  update() {
+  override update() {
     const input = keyDirection(); // y: gas and brake, x: steering
     this.speed = clamp(this.speed + input.y * .01, -.1, .3); // units per frame
     this.angle += input.x * .05 * sign(this.speed); // right turns right, backing up too
@@ -46,11 +46,12 @@ class Car extends EngineObject {
 
 ## Imports, settings and names
 
-- Import every engine name `game.js` uses, in the one `import { … } from 'littlejsengine';` at its top; add a name there when you start using it. A name used without its import is a `ReferenceError` when the game loads, and `deno check game.js` names it before that.
+- Import every engine name `game.ts` uses, in the one `import { … } from 'littlejsengine';` at its top; add a name there when you start using it. A name used without its import is a `ReferenceError` when the game loads, and `deno check game.ts` names it before that.
 - The engine's settings — `cameraPos`, `cameraScale`, `gravity`, `paused`, `timeScale`, `canvasClearColor`, `canvasFixedSize`, `debugWatermark`, `tilesPixelated`, ... — can be read through their imports, which follow every change, but not assigned: an import is read-only, and `cameraScale = 32` throws. Each one has a setter: `setCameraScale(32)`, `setGravity(vec2(0, -.02))`, `setPaused(true)`, `setDebugWatermark(false)`. The reference lists settings as `name = default`; set one with `setName(value)`.
-- The game's own top-level names live in `game.js`'s module, apart from the engine's, so none of them replaces an engine name. Declaring a name that is also imported is an error at load: give your own things names of their own (`playerGravity`, `gameTime`); `score` and `level` are fine.
-- The helper modules copied from `littlejs/templates/` (`menus.js`, `textureGenerator.js`, `gameFx.js`, `cards.js`) export what they define; import from them the names the game uses, e.g. `import { initDefaultAtlas } from './templates/textureGenerator.js';`. A helper's own imports bring in the helpers it needs.
-- A module's variables can't be reached from the browser console or by name. To drive the game from outside while testing, put hooks on `globalThis` (`globalThis.game = { player, spawnEnemy };`).
+- The game's own top-level names live in `game.ts`'s module, apart from the engine's, so none of them replaces an engine name. Declaring a name that is also imported is an error at load: give your own things names of their own (`playerGravity`, `gameTime`); `score` and `level` are fine.
+- The helper modules copied from `littlejs/templates/` (`menus.ts`, `textureGenerator.ts`, `gameFx.ts`, `cards.ts`) export what they define; import from them the names the game uses, e.g. `import { initDefaultAtlas } from './templates/textureGenerator.ts';`. A helper's own imports bring in the helpers it needs.
+- A module's variables can't be reached from the browser console or by name. To drive the game from outside while testing, put hooks on `globalThis` (`Object.assign(globalThis, { game: { player, spawnEnemy } });`).
+- It is TypeScript, checked strictly. A top-level `let` gets a value or a type where it is declared (`let ball = vec2();`, `let player: Player;`), a class declares the fields it adds (`speed = 0;`, `timer: Timer;`), and the methods the engine calls on an object (`update`, `render`, `collideWithObject`) are marked `override`. Engine types such as `Vector2` and `Color` are imported with the rest, as `type Vector2` when only the type is used.
 
 ## Use the engine's built-ins — don't reinvent
 

@@ -19,13 +19,13 @@ Start a new LittleJS game by copying the closest **example game** out of `little
 
 1. **Game name** (camelCase, e.g. `memoryMatch`) — the project's folder, `projects/<name>/`. If they don't care, propose one.
 2. **Core mechanic / genre** in one line — enough to pick the template (Step 2).
-3. **Does it need a title/pause menu now or later?** (decides whether to wire `menus.js` from the start.)
+3. **Does it need a title/pause menu now or later?** (decides whether to wire `menus.ts` from the start.)
 
 **These questions must never stall the scaffold.** Ask them only in an interactive back-and-forth where an answer can actually arrive. If the request already implies the answers ("make me a pong game" → name `pong`, arcade paddle game, no menu yet), or you are in a one-shot / non-interactive / headless run where the user cannot reply, pick sensible defaults and go straight to Step 2. Never end a turn having only asked questions — start the project and show it first, then say what you assumed and offer to change it.
 
 ## Step 2 — Pick the starter + template
 
-**Two decisions:** which example game to COPY (working `index.html`/`game.js`/`package.json`), and which template to PULL PATTERNS FROM (copy code out of it into `game.js` — never base the project structure on a template).
+**Two decisions:** which example game to COPY (working `index.html`/`game.ts`/`package.json`), and which template to PULL PATTERNS FROM (copy code out of it into `game.ts` — never base the project structure on a template).
 
 Copy base — pick the closest **example game folder** (under `littlejs/examples/`):
 
@@ -46,42 +46,42 @@ Pattern source — pick the closest **template** (`littlejs/templates/*.html`):
 | --------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Basic shapes / text / camera (default)              | `game.html`              | —                                                                                                                                                        |
 | Box2D physics                                       | `box2dGame.html`         | (engine wasm loader, not a template module)                                                                                                              |
-| Turn-based grid / board                             | `boardGame.html`         | `menus.js`, `gameFx.js`, `textureGenerator.js`                                                                                                           |
-| Playing cards                                       | `cardsGame.html`         | `textureGenerator.js`, `cards.js`                                                                                                                        |
-| Title / pause / options UI                          | `menuGame.html`          | `menus.js`                                                                                                                                               |
-| Procedural sprite atlas                             | `textureGame.html`       | `textureGenerator.js`                                                                                                                                    |
-| Shape/abstract/neon visuals, or many round entities | `textureGame.html`       | `textureGenerator.js` — then apply the `littlejs/atlas-shape-art` skill                                                                                  |
+| Turn-based grid / board                             | `boardGame.html`         | `menus.ts`, `gameFx.ts`, `textureGenerator.ts`                                                                                                           |
+| Playing cards                                       | `cardsGame.html`         | `textureGenerator.ts`, `cards.ts`                                                                                                                        |
+| Title / pause / options UI                          | `menuGame.html`          | `menus.ts`                                                                                                                                               |
+| Procedural sprite atlas                             | `textureGame.html`       | `textureGenerator.ts`                                                                                                                                    |
+| Shape/abstract/neon visuals, or many round entities | `textureGame.html`       | `textureGenerator.ts` — then apply the `littlejs/atlas-shape-art` skill                                                                                  |
 | Runtime tuning controls                             | `tweakableGame.html`     | — (engine plugin, `tweak()`, debug builds only)                                                                                                          |
-| Canvas UI widgets                                   | `uiGame.html`            | `menus.js` (+ `uiGame.html` patterns)                                                                                                                    |
-| Sound effects + screen shake (any game)             | (read `gameFx.js` API)   | `gameFx.js`                                                                                                                                              |
-| Computer opponent, turn-based 2-player              | `boardGame.html` (board) | `gameAI.js` — describe the moves, `await alphaBetaAI(game, state, depth)`; a state keeps the position in `board` and the side to move in `currentPlayer` |
+| Canvas UI widgets                                   | `uiGame.html`            | `menus.ts` (+ `uiGame.html` patterns)                                                                                                                    |
+| Sound effects + screen shake (any game)             | (read `gameFx.ts` API)   | `gameFx.ts`                                                                                                                                              |
+| Computer opponent, turn-based 2-player              | `boardGame.html` (board) | `gameAI.ts` — describe the moves, `await alphaBetaAI(game, state, depth)`; a state keeps the position in `board` and the side to move in `currentPlayer` |
 
-Combine rows freely — `gameFx.js` stacks onto any other choice. A template's imports name the helpers its code uses: copy the ones whose code you take. A helper imports the helpers it needs from beside it: `cards.js` needs `textureGenerator.js`. The templates are ES modules like a game, importing the engine and the helpers beside them; read them for patterns, don't serve them.
+Combine rows freely — `gameFx.ts` stacks onto any other choice. A template's imports name the helpers its code uses: copy the ones whose code you take. A helper imports the helpers it needs from beside it: `cards.ts` needs `textureGenerator.ts`. The templates are ES modules like a game, importing the engine and the helpers beside them; read them for patterns, don't serve them. Their code is untyped JavaScript: what you take from them gets its types in `game.ts`.
 
 ## Step 3 — Scaffold
 
 1. Copy the chosen starter folder to the project: `cp -r littlejs/examples/<starter> projects/<name>`.
 2. Copy each helper module chosen in Step 2 into `projects/<name>/templates/` (only the ones needed, not all of them), with the helpers they import.
-3. `index.html` — retitle it. It loads `game.js` as a module and nothing else, except Box2D's wasm loader, a plain script before it in `box2dGame`:
+3. `index.html` — retitle it. It loads `game.ts` as a module and nothing else, except Box2D's wasm loader, a plain script before it in `box2dGame`:
 
    ```html
    <script src=node_modules/littlejsengine/dist/box2d.wasm.js></script>
    <!-- only for Box2D -->
-   <script type=module src=game.js></script>
+   <script type=module src=game.ts></script>
    ```
 
-   `game.js` imports the engine and the helpers:
+   `game.ts` imports the engine and the helpers:
 
-   ```javascript
+   ```ts
    import { drawTile, engineInit, vec2 } from "littlejsengine";
-   import { drawCard, initCardAtlas } from "./templates/cards.js";
-   import { createTitleMenu, showMenu } from "./templates/menus.js";
+   import { drawCard, initCardAtlas } from "./templates/cards.ts";
+   import { createTitleMenu, showMenu } from "./templates/menus.ts";
    ```
 
 4. `package.json` — set `name` to the game's name, lowercase.
-5. `deno install` in the project. It puts the engine from npm (`littlejsengine`) in `node_modules/littlejsengine/`. Under the dev server the import loads its debug build, whose asserts and watermark help catch mistakes. Its typings, `dist/littlejs.d.ts`, are what `deno check game.js` checks the game against; the starter's `deno.json` turns that on for JavaScript.
+5. `deno install` in the project. It puts the engine from npm (`littlejsengine`) in `node_modules/littlejsengine/`. Under the dev server the import loads its debug build, whose asserts and watermark help catch mistakes. Its typings, `dist/littlejs.d.ts`, are what `deno check game.ts` checks the game against, strictly, as the starter's `deno.json` says.
 
-**Never substitute a CDN for the LittleJS engine.** The engine is the npm package in the project's `node_modules/`. If `deno install` fails, STOP and tell the user plainly that the scaffold is incomplete and why. Do not paper over it with a CDN `<script src>`. A 3D game needs no CDN either — LittleJS 3D is inside the engine file. Confirm no `<script src>` in `index.html` points at an external URL, and that `game.js` imports only `'littlejsengine'` and its own files.
+**Never substitute a CDN for the LittleJS engine.** The engine is the npm package in the project's `node_modules/`. If `deno install` fails, STOP and tell the user plainly that the scaffold is incomplete and why. Do not paper over it with a CDN `<script src>`. A 3D game needs no CDN either — LittleJS 3D is inside the engine file. Confirm no `<script src>` in `index.html` points at an external URL, and that `game.ts` imports only `'littlejsengine'` and its own files.
 
 **Never review, verify, or summarize the contents of the engine or of the helper modules you copied** — they are third-party code. The game code you wrote is the only thing that deserves review.
 
@@ -89,17 +89,17 @@ Then serve it and show it, as for any web project, and in the same turn make it 
 
 ## Step 4 — One step per turn
 
-Each later turn adds one step of the plan, the next one or the one the user picked, as `littlejs/main.md` sizes them: one thing to see or try, tens of lines, made with edits. For a pinball: a ball falls on the table and the arrows flip two paddles (playable, the first turn), then the ball bounces off the walls, then bumpers, then the score, then sparks on a bumper hit. A bug that keeps the user from trying the step is part of it; any other goes in the plan. Write it into `game.js` (split into more modules — `player.js`, `ui.js`, `constants.js` — only as it grows; `game.js` imports them). Pull concrete patterns out of the chosen template(s) by reading them from `littlejs/templates/`. Follow the `littlejs/littlejs-conventions` skill for engine rules (imports and setters, engine built-ins, pitfalls).
+Each later turn adds one step of the plan, the next one or the one the user picked, as `littlejs/main.md` sizes them: one thing to see or try, tens of lines, made with edits. For a pinball: a ball falls on the table and the arrows flip two paddles (playable, the first turn), then the ball bounces off the walls, then bumpers, then the score, then sparks on a bumper hit. A bug that keeps the user from trying the step is part of it; any other goes in the plan. Write it into `game.ts` (split into more modules — `player.ts`, `ui.ts`, `constants.ts` — only as it grows; `game.ts` imports them). Pull concrete patterns out of the chosen template(s) by reading them from `littlejs/templates/`. Follow the `littlejs/littlejs-conventions` skill for engine rules (imports and setters, engine built-ins, pitfalls).
 
 ## Step 5 — Check each step before you end the turn
 
-A step is not done on the strength of having written it. Each time, format, lint and type-check it (`deno fmt`, `deno lint game.js`, `deno check game.js`), look at the page and the console as for any web project, and re-read your own `gameInit`/`gameUpdate` for values that silently become `NaN` or `undefined` — save data read with a scalar default is the classic one (see `littlejs/littlejs-conventions`).
+A step is not done on the strength of having written it. Each time, format, lint and type-check it (`deno fmt`, `deno lint game.ts`, `deno check game.ts`), look at the page and the console as for any web project, and re-read your own `gameInit`/`gameUpdate` for values that silently become `NaN` or `undefined` — save data read with a scalar default is the classic one (see `littlejs/littlejs-conventions`).
 
-If you need to drive the game programmatically to check something, expose a few hooks on `globalThis` from `game.js` for the session and say so in your summary.
+If you need to drive the game programmatically to check something, expose a few hooks on `globalThis` from `game.ts` for the session and say so in your summary.
 
 **Time-driven logic can be checked deterministically** (engine 1.18.25+). Anything on a `Timer`, a spawn interval, or a cooldown is otherwise unverifiable without sitting and watching, so when correctness depends on elapsed time, use the engine's headless stepping instead of guessing:
 
-```javascript
+```ts
 setHeadlessMode(true); // no rendering, audio, or input
 setEngineManualStep(true); // engine stops driving itself with requestAnimationFrame
 await engineInit(
@@ -126,8 +126,8 @@ Then end the turn: say what to try, what you assumed, and the next step of the p
 - **Reaching for three.js for a 3D game** — copy `3dGame` and use the built-in `render3D`. Don't carry three.js habits over either: keep WebGL on (no `setGLEnable(false)`), Y is up, builders take diameters.
 - **Loading a `tweakables.js` helper** — there isn't one any more; `tweak()` is an engine function.
 - **Treating the engine as reviewable code** — reading it, diffing it, or verifying it line by line wastes the whole turn on third-party source.
-- **Copying `cards.js` without `textureGenerator.js`** — it imports it.
+- **Copying `cards.ts` without `textureGenerator.ts`** — it imports it.
 - **Assigning an engine setting** (`cameraScale = 32`) — an import is read-only and the assignment throws; use its setter, `setCameraScale(32)`.
-- **Loading the engine or a helper with a `<script src>`** — `game.js` imports them.
+- **Loading the engine or a helper with a `<script src>`** — `game.ts` imports them.
 - **A `src` or an import outside the project folder** — every one must resolve inside `projects/<name>/`, which is what Vite serves.
 - **Loading the engine from a CDN** (`unpkg`/`jsdelivr`) because the install failed — the game then needs internet. Retry `deno install`, or stop and tell the user. Nothing a game needs comes from a CDN.

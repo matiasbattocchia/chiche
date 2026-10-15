@@ -11,7 +11,7 @@
 
 To start LittleJS, you need to create a few functions and pass them to engineInit.
 
-```javascript
+```ts
 // Start up LittleJS engine with your callback functions
 engineInit(gameInit, gameUpdate, gameUpdatePost, gameRender, gameRenderPost, imageSources=[], rootElement=document.body)
 // a rootElement keeps its inline styles and holds the canvas, which is still sized from the window
@@ -46,7 +46,7 @@ ask for. `engineStep` drives the real update loop, so `timeScale` scales fixed u
 step just as it does under `requestAnimationFrame`: at `timeScale = .5`, ten steps run five
 fixed updates. Leave `timeScale` at 1 when you want frame counts to match exactly.
 
-```javascript
+```ts
 setHeadlessMode(true);        // no rendering, audio, or input
 setEngineManualStep(true);    // no requestAnimationFrame loop
 await engineInit(gameInit, gameUpdate, gameUpdatePost, gameRender, gameRenderPost);
@@ -71,7 +71,7 @@ want. Outside headless mode each step also renders, so a large count blocks the 
 and throws away every frame but the last. To advance a lot of time while staying
 responsive, chunk it yourself and let the browser paint between chunks:
 
-```javascript
+```ts
 // advance 10 minutes of game time without freezing the tab
 let remaining = 36000;
 (function chunk()
@@ -89,7 +89,7 @@ let remaining = 36000;
 - Timer - Tracks time automatically
 - RandomGenerator - Seeded random number generator
 
-```javascript
+```ts
 
 // Object Constructors
 vec2(x=0, y=x)                                // Create a 2D vector with Vector or floats
@@ -249,7 +249,7 @@ Timer.valueOf()                       // Get how long since elapsed, 0 if not se
 - Can apply rotation, mirror, color and additive color
 - Text and font rendering system with built in engine font
 
-```javascript
+```ts
 // Drawing functions
 // Most also accept optional trailing params: useWebGL=glEnable, screenSpace=drawScreenSpace, context
 // Canvas2D draws (text, useWebGL=false) go to a canvas above every WebGL draw, whatever order they are drawn in
@@ -405,7 +405,7 @@ glDraw(x, y, sizeX, sizeY, angle=0, uv0X, uv0Y, uv1X, uv1Y, rgba=-1, rgbaAdditiv
 - [ZzFX Sound Effect Generator](https://killedbyapixel.github.io/ZzFX)
 - [ZzFXM Music System](https://keithclark.github.io/ZzFXM)
 
-```javascript
+```ts
 // Sound Object
 Sound(zzfxSound, randomness, range, taper, onloadCallback) // Create a zzfx sound
 Sound(filename, randomness, range, taper, onloadCallback)  // Load a wave, mp3, or ogg
@@ -467,7 +467,7 @@ playAudioBuffer(buffer, volume=1, rate=1, pan=0, loop=false, gainNode, offset=0,
 - Route a group of sounds with `sound.output = effect`, or everything with `setAudioMasterEffect(effect)`
 - Chain effects with `effect.connect(next)`, never by assigning `effect.output`, that is the effect's own node
 
-```javascript
+```ts
 AudioEffect(mix=1)                                // Base class, input and output gain nodes with a mix between
 AudioEffect.input / AudioEffect.output            // Its own nodes, output feeds the master gain until connect() moves it
 AudioEffect.setMix(mix, fadeTime=0)               // 0 is fully dry, 1 is fully wet
@@ -488,7 +488,7 @@ AudioFilter.node, AudioReverb.node, ...           // Each effect's wrapped Web A
 - Routes touch input to mouse
 - Virtual gamepad for touch devices
 
-```javascript
+```ts
 // Keyboard, keys are KeyboardEvent.code names like 'KeyW', 'Space' or 'ArrowUp', not characters
 keyIsDown(key)                        // Is key down?
 keyWasPressed(key)                    // Was key pressed this frame?
@@ -583,7 +583,7 @@ touchInputEnable = true               // Should touch input route to mouse event
 - Parents are updated before children
 - Call destroy() to get rid of objects
 
-```javascript
+```ts
 // Engine Object
 EngineObject(pos, size=(1,1), tileInfo, angle=0, color, renderOrder=0)
 EngineObject.update()                              // Update object, called automatically
@@ -671,7 +671,7 @@ engineObjectsDestroy(immediate=true) // destroy every object except the persiste
 - Tile layers made without WebGL can be drawn to using their context with Canvas2D
 - Drawn with WebGL by default, or straight to the main canvas when made with useWebGL=false
 
-```javascript
+```ts
 
 // Canvas Layer
 CanvasLayer(pos, size, angle=0, renderOrder=0, canvasSize=(512,512), useWebGL=true) // Create a canvas layer object
@@ -737,7 +737,7 @@ objectLayersLoad(tileMapData)                       // Make the objects of a map
 - Simple kinematic particle system with many parameters
 - [Particle Effect Designer](https://killedbyapixel.github.io/LittleJS/examples/particles) - Editor for creating LittleJS Particle Systems
 
-```javascript
+```ts
 // Particle Emitter Object
 ParticleEmitter(pos, angle, emitSize, emitTime, emitRate, emitConeAngle, tileInfo, colorStartA, colorStartB,
     colorEndA, colorEndB, particleTime, sizeStart, sizeEnd, speed, angleSpeed, damping, angleDamping,
@@ -759,7 +759,7 @@ particleEmitRateScale = 1 // Scales particles emit rate
 - Effects are plain data, {name, settings, behaviors}, the format the particle designer saves, so a designed library
   plays by name
 
-```javascript
+```ts
 particleEffect(name, pos, {scale, hue, saturation, angle}) // play an effect, returns its ParticleEmitter; a
                                         // continuous one goes until destroyed, a one-shot ends itself; any setting
                                         // in the options replaces the effect's own: {emitTime: .5} for a burst,
@@ -824,7 +824,7 @@ particleEffectShapeTile(name)           // a built-in shape's tile, on a sheet d
 - Auto-registers via `engineAddPlugin` — no setup needed
 - See the Tween and Tween Advanced shorts (`examples/shorts/tween.js`, `tweenAdvanced.js`) for demos
 
-```javascript
+```ts
 // Tween a property by dot-path (common case)
 tweenProperty(target, propertyPath, start, end, duration=1, options)
 
@@ -870,7 +870,7 @@ tweenStopAll()                 // Stop every active tween (e.g. on level reset)
 - Pause is the engine's `paused`: a scene's update stops with gameUpdate, its render hooks keep drawing
 - See the Scenes short and the Box2D example
 
-```javascript
+```ts
 setScene(scene)      // Leave the current scene, clear objects, enter scene; the current one restarts it
 getScene()           // The current scene, or undefined
 
@@ -887,7 +887,7 @@ scene.renderPost()   // After gameRenderPost, over the game, while paused too; p
 - Draws mountains by default, or anything a game draws into its canvas
 - See the Parallax short and the platformer example
 
-```javascript
+```ts
 new ParallaxLayer(pos, size=vec2(32,16), parallax=.5, renderOrder=-1e3, drawFunction, canvasSize=vec2(512,256))
                            // a CanvasLayer; pos is where the image's middle is when the camera is there too,
                            // size the world size of one copy; parallax is how much of the camera's movement it
@@ -914,7 +914,7 @@ for (let i = 3; i--;)
 - Optional path smoothing (corner cleanup + string-pull line-of-sight)
 - See `examples/shorts/pathFinder.js` for a demo
 
-```javascript
+```ts
 // Construct from a TileCollisionLayer or a Vector2 grid size
 const pf = new PathFinder(tileCollisionLayer);
 const pf = new PathFinder(vec2(50, 50));
@@ -949,7 +949,7 @@ pf.getNode(x, y)                     // Get PathFinderNode at tile coords
 - A click on the UI, or a navigation press (Space, Enter, gamepad A) that activates it, is used up before objects update and `gameUpdatePost`, so read world clicks there; `gameUpdate` runs first and still sees it, so check `uiSystem.isMouseOverUI()` there; only the press is used up, `mouseIsDown` stays true while it is held, so a held action like auto fire checks `uiSystem.isMouseOverUI()` too
 - See `examples/uiSystem/`, `examples/shorts/uiSystem.js` and `examples/shorts/uiSlice.js` for demos
 
-```javascript
+```ts
 // Setup
 const ui = new UISystemPlugin()        // Creates global uiSystem
 uiSystem.defaultColor                  // Default style values used by all widgets
@@ -1026,7 +1026,7 @@ UILayout.relayout()                    // Call manually if you mutate a child's 
 - Must be constructed BEFORE `PostProcessPlugin` so post-process sees lit pixels
 - See `examples/shorts/lightSystem.js` for a demo
 
-```javascript
+```ts
 // Setup (call in gameInit, after engineInit has made the WebGL context)
 new LightSystemPlugin()                       // Defaults: full-canvas lightmap, BLACK ambient
 new LightSystemPlugin(vec2(512, 512))         // Lower-res lightmap (perf knob)
@@ -1096,7 +1096,7 @@ class LavaTile extends EngineObject {
 - See `examples/shorts/postProcess.js` for your own shader code, and `examples/shorts/postEffects.js` for the built in
   effects
 
-```javascript
+```ts
 new PostProcessPlugin(shaderCode, includeMainCanvas=false, feedbackTexture=false) // call in gameInit; with no
                                // shaderCode the image passes through unchanged
 postProcess                    // Global instance created by the plugin
@@ -1129,7 +1129,7 @@ postProcessOutline(color=BLACK, thickness=1, threshold=.02) // lines where the 3
 - Right handed, Y up, camera looks down -Z, angles in radians
 - Used by the Render3D plugin, but has no rendering dependencies
 
-```javascript
+```ts
 // Vectors
 vec3(x, y, z)                  // vec3() is zero, vec3(s) fills all, vec3(x, y) has z=0
 isVector3(v)                   // true if v is a Vector3
@@ -1213,7 +1213,7 @@ raycastBox(ray, pos, size, rotation)           // distance t to the box, or unde
   render3dGlow, render3dShaders; games: render3dDodgeGame, render3dRacingGame, render3dPuzzleGame; and `examples/3d`
   is a full example with all of it in one scene
 
-```javascript
+```ts
 // Setup (call in gameInit)
 new Render3DPlugin;                  // creates global render3D, renders automatically before gameRender
 
@@ -1775,7 +1775,7 @@ trail.clear()                                 // forget the trail, for when the 
   - Colors are plain 0 to 1 values with no color management, and a point light fades out by a radius, not by
     physical intensity units
 
-```javascript
+```ts
 // three.js                               LittleJS 3D
 scene.add(mesh)                           // new EngineObject3D(pos3D, mesh), or render3D.drawMesh each frame
 mesh.position .rotation .scale            // obj.pos3D .rotation3D .scale3D
@@ -1831,7 +1831,7 @@ geometry.dispose()                        // optional here, a collected mesh fre
 - A game names its own types, as objectLayersAddType does in 2D
 - The 3D level editor, in debug builds, edits the level a game loaded: 0 on the debug overlay
 
-```javascript
+```ts
 level3DAddType(name, make, defaults={}, tileInfo) // A type by name: a class made with new make(pos3D, properties),
                                                   // or an arrow function called with them, like a player start
 level3DAddMesh(name, mesh, tileInfo, color=WHITE) // A static prop type of a mesh, with color and solid properties
@@ -1899,7 +1899,7 @@ To make it your own game's editor, with your own types, keys and panel buttons, 
 The panel's Scene box edits the level's scene block: "Level sets the scene" starts one from what is on screen, and
 off leaves the sky, sun, fog and shadows to the game.
 
-```javascript
+```ts
 // Tools, the keys Unity, Unreal and Godot use
 Q select · W move · E rotate · R scale   // drag a handle, or the object itself
 B                                        // blocks: click or drag places the type picked in the panel, Shift
@@ -1945,7 +1945,7 @@ levelEditor.use3D = undefined            // true or false picks the 3D or the 2D
 - Do not call `renderer.setPixelRatio`, the plugin manages canvas size and DPR
 - See `examples/threejs/` for a 3D platformer demo
 
-```javascript
+```ts
 // Setup (call in gameInit), THREE is the three.js module you loaded
 new ThreeJSPlugin(THREE, cameraFOV=60) // creates global threeJS, renders automatically
 threeJS.scene                  // three.js scene, add lights and meshes here
@@ -1969,7 +1969,7 @@ obj.syncMesh()                 // copy the 2D transform to the mesh
 - Angular values are clockwise like `angle`: angular velocity, torque, joint angles and limits, motor speeds
 - See `examples/box2d/` for a full demo
 
-```javascript
+```ts
 // Setup (call once, awaited in gameInit)
 await box2dInit()              // Loads the WASM and creates global box2d / Box2dPlugin
 box2dSetDebug(true)            // Toggle debug rendering of physics shapes (box2dDebug)
@@ -2055,7 +2055,7 @@ new Box2dGearJoint(objectA, objectB, joint1, joint2, ratio=1) // turns objectB o
   on the server and posting a score need a logged in player, and an unlock earned while not logged in stays local
 - See `examples/shorts/medals.js` for a demo
 
-```javascript
+```ts
 // Medals
 new Medal(id, name, description='', icon='🏆', src)  // src is optional image url
 medal.unlock()                       // Mark unlocked, save, and queue the popup; the promise it returns is optional
@@ -2125,7 +2125,7 @@ newgrounds.resendUnlocks()           // advanced: send the ones whose request di
 - World-space (WebGL or 2D) and screen-space (2D by default, useWebGL for WebGL) variants
 - See `examples/shorts/nineSlice.js`, `examples/shorts/uiSlice.js` and `examples/shorts/crescent.js`
 
-```javascript
+```ts
 // Nine-slice — 3x3 tile grid scaled to fit
 drawNineSlice(pos, size, startTile, color, borderSize, additiveColor, extraSpace, angle=0, useWebGL=glEnable, screenSpace=drawScreenSpace, context)
 drawNineSliceScreen(pos, size, startTile, color=WHITE, borderSize=32, additiveColor, extraSpace=2, angle=0, useWebGL=false, context)
@@ -2152,7 +2152,7 @@ getCrescentPoints(pos, size=1, percent=0, angle=0, invert=false, sides=glCircleS
   ImageFont made from one counts its tiles the same way
 - See `examples/shorts/textureSheet.js`
 
-```javascript
+```ts
 loadSprite(src, frameSize, padding=1, sourcePadding=0) // Load an image and pack it, returns a TileInfo
 loadAtlas(imageSrc, jsonSrc, padding=1) // Load a TexturePacker or Aseprite atlas, returns name->TileInfo object
 parseAtlas(data)                      // Parse atlas json into named frame groups, used by loadAtlas
@@ -2187,7 +2187,7 @@ async function gameInit()
 - Release builds have none of its code, tweak and the rest do nothing, and the code's values are used as they are
 - See `examples/shorts/tweakables.js` for a demo
 
-```javascript
+```ts
 tweak(path, options)       // Add a global, or a dotted path to a field on one, call it at the end of gameInit
                            // options: {min, max, step, label, object}, the slider shows when min and max are set
 tweak('speed', {object: settings}) // A field of an object, for an ES module game; with two objects that share a
@@ -2210,7 +2210,7 @@ tweakEngineDefaults()      // Add gravity, timeScale, cameraScale and soundVolum
 - Debug builds only, release builds have none of its code
 - To make it your own game's editor, with your own types, keys and panel buttons, see [EDITOR.md](EDITOR.md)
 
-```javascript
+```ts
 levelEditor.isOpen         // Is the editor open? read only
 levelEditor.open()         // Open the editor, pausing the game; close() plays on with the changes
 levelEditor.onTile = (layer, layerPos, tile)=> {} // What the game does with a painted tile, like set its
@@ -2259,7 +2259,7 @@ setLevelEditor(new MyEditor)   // Make it the one in use, before the editor open
 - Debug primitive rendering system
 - Debug functions are only active in debug builds
 
-```javascript
+```ts
 ASSERT(assert, output) // Asserts if the expression is false
 LOG(...output)         // Logs output to the console (stripped from release builds)
 debugRect(pos, size, color=WHITE, time=0, angle=0, fill)    // Draw debug rectangle
@@ -2298,7 +2298,7 @@ debugWatermark       // Should watermark with FPS appear in debug mode?
 Old names and argument orders that still work, marked `@deprecated` in the types; use the new ones, the old will be
 removed in a later release.
 
-```javascript
+```ts
 obj.collideTiles                         // since 1.20, use obj.collideLevel, the same flag
 weldJoint.setSpringDampingRatio(ratio)   // since 1.20, use setDampingRatio, and getDampingRatio for the getter
 newgrounds.logView()                     // since 1.20, does nothing, the view is logged when the plugin starts

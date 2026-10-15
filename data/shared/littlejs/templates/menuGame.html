@@ -57,14 +57,14 @@ import {
   showConfirmDialog,
   showMenu,
   showMenuToast,
-} from "./menus.js";
+} from "./menus.ts";
 
 // engine settings
 setCameraScale(32);
 
 ///////////////////////////////////////////////////////////////////////////////
 // MENU SYSTEM TEMPLATE
-// Demonstrates createMenu() and createToolbar() from menus.js.
+// Demonstrates createMenu() and createToolbar() from menus.ts.
 
 let playerPos = vec2(0, 0);
 const playerSize = vec2(2, 2);
@@ -77,7 +77,7 @@ const playerSize = vec2(2, 2);
 // this, alert dialogs leave paused=false, letting gameUpdate run on the same
 // frame as a menu Esc and re-open pause on top of the surfaced menu.
 
-// Gameplay code in gameUpdate / gameRender gates on isPlaying() from menus.js
+// Gameplay code in gameUpdate / gameRender gates on isPlaying() from menus.ts
 // (replaces the old per-game let isPlaying / setPlaying boilerplate). The
 // toolbar is always visible — installDefaultToolbar grays the hamburger
 // when the title menu is on top.
@@ -114,7 +114,7 @@ async function gameInit() {
     dismissable: false,
     onStart: playFromTitle,
     items: [
-      { type: "label", text: "A demo of menus.js" },
+      { type: "label", text: "A demo of menus.ts" },
       { type: "button", label: "PLAY", onClick: playFromTitle },
       { type: "button", label: "OPTIONS", onClick: () => pushMenu("options") },
       { type: "button", label: "MEDALS", onClick: () => pushMenu("medals") },
@@ -245,7 +245,7 @@ async function gameInit() {
     title: "HELP",
     onHide: popMenu,
     items: [
-      { type: "label", text: "menus.js demo" },
+      { type: "label", text: "menus.ts demo" },
       {
         type: "text",
         text: "A small declarative menu and toolbar helper for " +

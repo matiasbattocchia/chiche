@@ -28,20 +28,20 @@ const ballSize = vec2(0.7, 0.7);
 const aiSpeed = 0.3;
 const ballSpeed = 0.35;
 
-let leftY;
-let rightY;
-let ball;
-let ballVel;
-let waitingToServe;
-let serveDir;
-let leftScore;
-let rightScore;
-let half;
-let leftX;
-let rightX;
-let limitY;
+let leftY = 0;
+let rightY = 0;
+let ball = vec2();
+let ballVel = vec2();
+let waitingToServe = true;
+let serveDir = 1;
+let leftScore = 0;
+let rightScore = 0;
+let half = fieldSize.scale(0.5);
+let leftX = 0;
+let rightX = 0;
+let limitY = 0;
 
-function resetBall(dir) {
+function resetBall(dir: number) {
   ball = vec2(0, 0);
   ballVel = vec2();
   waitingToServe = true;
@@ -109,7 +109,7 @@ function gameUpdate() {
   }
 }
 
-function bounceOffPaddle(ballX, paddleY, dir) {
+function bounceOffPaddle(ballX: number, paddleY: number, dir: number) {
   ball.x = ballX;
   ballVel.x = dir * Math.abs(ballVel.x);
   ballVel.y += (ball.y - paddleY) * 0.05;

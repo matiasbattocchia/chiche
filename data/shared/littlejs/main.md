@@ -34,7 +34,7 @@ A five-year-old is waiting, and what keeps them waiting is something to play wit
 of them in the first turn, then give them something new in it every minute or two.
 
 - The first turn ends with the game playable, however rough: the starter copied, and in its
-  `game.js` the player, a plain shape or icon, moving with the keys over a plain world (a grid of
+  `game.ts` the player, a plain shape or icon, moving with the keys over a plain world (a grid of
   colored squares, a road, a floor), with a particle effect when it does something. A few dozen
   lines.
 - Each later turn is one step on top of that: one thing the user sees or tries, tens of lines, not
@@ -43,7 +43,7 @@ of them in the first turn, then give them something new in it every minute or tw
   rider on the motorcycle is a step, its mirrors another.
 - A change to a value (faster, slower, bigger, another color) is that value: change it, look, end
   the turn. Nothing rides along with it.
-- Change `game.js` with edits. Writing it whole again means the step is too big.
+- Change `game.ts` with edits. Writing it whole again means the step is too big.
 - A request that names many things is a plan, not a turn: make its first step, and end the turn with
   the plan, a line a step. A message that comes in while you work either corrects the step under
   way, and goes into it, or is another step: put it in the plan, and end the turn with the step
@@ -93,11 +93,11 @@ in the plan, and the turn ends with the road.
 
 - It starts as a copy of a starter in `littlejs/examples/`, not from create-vite, and is served and
   shown like any web project.
-- It is JavaScript ES modules: `game.js` at the project's root imports the engine from
-  `'littlejsengine'` and the rest of the game's modules. Split it into modules (`player.js`,
-  `ui.js`, `constants.js`) as it grows.
-- Feedback: type check with `deno check game.js`, against the engine's typings (the starter's
-  `deno.json` turns it on for JavaScript), and lint with `deno lint game.js` and the game's other
+- It is TypeScript ES modules: `game.ts` at the project's root imports the engine from
+  `'littlejsengine'` and the rest of the game's modules. Split it into modules (`player.ts`,
+  `ui.ts`, `constants.ts`) as it grows.
+- Feedback: type check with `deno check game.ts`, against the engine's typings, strictly (the
+  starter's `deno.json`), and lint with `deno lint game.ts` and the game's other
   modules. Not `deno task build`: nothing serves its `dist/`, which leaves out the Box2D loader and
   the images `engineInit` loads. The helper modules in `templates/` are third-party: don't lint,
   check or review them.
@@ -117,7 +117,7 @@ in the plan, and the turn ends with the road.
 - Ask only what blocks the work; otherwise start building.
 - No other libraries unless the user asks for one. No external assets (images, sprite sheets, sound
   files) unless asked: draw with the engine and make sounds with ZzFX (`Sound`, or `SoundGenerator`
-  from `gameFx.js`).
+  from `gameFx.ts`).
 - Use what LittleJS has before writing your own: `keyDirection()` for arrows and WASD, `keyIsDown()`
   for other keys, `gamepadStick()`, `isOverlapping`, `screenToWorld` / `worldToScreen`,
   `isOnScreen`, `Timer`, the math shortcuts and `Vector2` methods, `TileCollisionLayer` with
@@ -163,7 +163,7 @@ They are not part of the engine. To use one, copy it from `littlejs/templates/` 
 `templates/` folder and import from it. Grep the engine's `littlejs.d.ts` before taking a name for
 engine API.
 
-- `menus.js`: title, pause and options menus, dialogs, toolbars, toasts and medals; don't build DOM
+- `menus.ts`: title, pause and options menus, dialogs, toolbars, toasts and medals; don't build DOM
   menus by hand. `createTitleMenu`, `createPauseMenu`, `createOptionsMenu`, `createMenu`,
   `createToolbar`, `showConfirmDialog`, `showAlertDialog`, `showGameOverDialog`, `MenuMedal`. Pause
   while a menu shows with `installAutoPause(() => isPlaying)` or
@@ -171,11 +171,11 @@ engine API.
   and Start. Its save data: `saveDataInit('GameName')` at the top of `gameInit`, before menus and
   medals, then `saveData` and the best-score helpers (`submitBestScore`, `getBestScore`). Options
   persist through a menu item's `persist:` key. `templates/menuGame.html` shows it all.
-- `gameFx.js`: `SoundGenerator` for sound effects, and screen shake (`addScreenShake`).
-- `textureGenerator.js`: sprites drawn into a texture atlas (`initDrawToTexture`, `drawToTexture`,
+- `gameFx.ts`: `SoundGenerator` for sound effects, and screen shake (`addScreenShake`).
+- `textureGenerator.ts`: sprites drawn into a texture atlas (`initDrawToTexture`, `drawToTexture`,
   `drawTextToTexture`), and `initDefaultAtlas` for 16 white shapes to tint.
-- `cards.js`: a deck of playing cards, piles, dealing and undo. It imports `textureGenerator.js`.
-- `gameAI.js`: a computer opponent for a turn-based two-player game. The game describes its moves
+- `cards.ts`: a deck of playing cards, piles, dealing and undo. It imports `textureGenerator.ts`.
+- `gameAI.ts`: a computer opponent for a turn-based two-player game. The game describes its moves
   and positions, and `await alphaBetaAI(game, state, depth)` picks a move. A state must keep the
   position in `board` and the side to move in `currentPlayer`: the search tells positions apart by
   those two fields only.

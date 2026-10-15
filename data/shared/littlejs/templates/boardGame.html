@@ -29,8 +29,8 @@ import {
   tweakDivider,
   vec2,
 } from "littlejsengine";
-import { initDefaultAtlas } from "./textureGenerator.js";
-import { SoundGenerator } from "./gameFx.js";
+import { initDefaultAtlas } from "./textureGenerator.ts";
+import { SoundGenerator } from "./gameFx.ts";
 import {
   bindPauseKey,
   clearSubmenuStack,
@@ -46,14 +46,14 @@ import {
   setPlaying,
   showConfirmDialog,
   showMenu,
-} from "./menus.js";
+} from "./menus.ts";
 
 ///////////////////////////////////////////////////////////////////////////////
 // BOARD GAME TEMPLATE
 // Two-player turn-based game on an NxN grid. Fork this file, then replace
 // placePiece(), aiMove(), and the piece-rendering loop in gameRender() with
 // the rules and visuals of your game. Menus (title / pause / options /
-// help / confirm) are wired via menus.js — see templates/menuGame.html for
+// help / confirm) are wired via menus.ts — see templates/menuGame.html for
 // the canonical menu demo.
 
 const BOARD_SIZE = 8;

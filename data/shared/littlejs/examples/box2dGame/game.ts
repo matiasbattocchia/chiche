@@ -30,8 +30,8 @@ setDebugWatermark(false);
 
 ///////////////////////////////////////////////////////////////////////////////
 // game state
-let mouseJoint;
-let groundObject;
+let mouseJoint: Box2dTargetJoint | undefined;
+let groundObject: Box2dStaticObject;
 
 ///////////////////////////////////////////////////////////////////////////////
 async function gameInit() {
@@ -41,7 +41,7 @@ async function gameInit() {
   // setup world
   setCanvasClearColor(hsl(0, 0, .9));
   setCameraScale(32);
-  mouseJoint = 0;
+  mouseJoint = undefined;
   setGravity(vec2(0, -50));
 
   // create ground object
@@ -66,7 +66,8 @@ function gameUpdate() {
     mouseJoint.setTarget(mousePos);
     if (mouseWasReleased(0)) {
       // release object
-      mouseJoint = mouseJoint.destroy();
+      mouseJoint.destroy();
+      mouseJoint = undefined;
     }
   } else if (mouseWasPressed(0)) {
     // grab object under the cursor

@@ -5,7 +5,7 @@ description: Use when a LittleJS game's visuals are geometric/abstract/neon shap
 
 # atlas-shape-art
 
-For shape-based LittleJS games, bake the 16 built-in white icons ONCE with `initDefaultAtlas()` and draw every entity as a per-instance **tinted `drawTile`** — instead of `drawCircle`/`drawEllipse`/`drawPoly`. The shapes already exist in `templates/textureGenerator.js`; you do not hand-roll a canvas or a star-point array.
+For shape-based LittleJS games, bake the 16 built-in white icons ONCE with `initDefaultAtlas()` and draw every entity as a per-instance **tinted `drawTile`** — instead of `drawCircle`/`drawEllipse`/`drawPoly`. The shapes already exist in `templates/textureGenerator.ts`; you do not hand-roll a canvas or a star-point array.
 
 **Core win:** one shared atlas → every sprite is a single quad in one unbroken WebGL batch, recolorable to any hue for free, zero external assets.
 
@@ -30,11 +30,11 @@ All are pure white, so `drawTile`'s color arg multiplies to any hue. `glow` and 
 
 ## Quick start
 
-1. Wire `textureGenerator.js`. If the project doesn't already contain it, copy it from `littlejs/templates/textureGenerator.js` (in the shared folder, where your shell starts) → the project's `templates/` folder (create it). Then import from it in `game.js`: `import { initDefaultAtlas } from './templates/textureGenerator.js';`.
+1. Wire `textureGenerator.ts`. If the project doesn't already contain it, copy it from `littlejs/templates/textureGenerator.ts` (in the shared folder, where your shell starts) → the project's `templates/` folder (create it). Then import from it in `game.ts`: `import { initDefaultAtlas } from './templates/textureGenerator.ts';`.
 
 2. Bake the atlas once in `gameInit` and keep the returned name→TileInfo map:
 
-```javascript
+```ts
 let icons;
 function gameInit() {
   icons = initDefaultAtlas(); // 16 white icons into tiles 0-15, halo already fixed
@@ -43,7 +43,7 @@ function gameInit() {
 
 3. Draw each entity as a tinted tile. Size is the full **diameter** (a circle of diameter 1 → `vec2(1)`):
 
-```javascript
+```ts
 function gameRender() {
   for (const e of entities) {
     drawTile(e.pos, vec2(e.size), icons[e.kind], e.color); // e.kind: 'circle','star',...
@@ -55,7 +55,7 @@ function gameRender() {
 
 White icon × `color` = that color, no per-instance canvas state. For additive glow, pass `additiveColor` with **alpha 0** — non-zero alpha thickens the silhouette. Note the arg order — `angle` and `mirror` come first:
 
-```javascript
+```ts
 drawTile(
   e.pos,
   vec2(e.size),

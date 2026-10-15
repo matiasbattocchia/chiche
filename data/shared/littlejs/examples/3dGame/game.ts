@@ -39,12 +39,14 @@ import {
   setTileDefaultPadding,
   sin,
   Sound,
+  type SoundInstance,
   tile,
   time,
   Timer,
   Trail3D,
   vec2,
   vec3,
+  type Vector3,
   WHITE,
 } from "littlejsengine";
 
@@ -78,12 +80,20 @@ const soundEngine = new Sound([
 ]);
 const soundJump = new Sound([.5, , 140, , , , , .5, 12]);
 const worldRandom = new RandomGenerator(1234); // the same world every time
-let terrain, player, title, freeCamera;
+let terrain: HeightMap;
+let player: Player;
+let title: EngineObject3D;
+let freeCamera: FirstPersonCamera3D | undefined;
 
 ///////////////////////////////////////////////////////////////////////////////
 // the player rolls over the terrain with a trail behind it
 
 class Player extends EngineObject3D {
+  speed: Vector3;
+  speedY: number;
+  groundTimer: Timer;
+  engineLoop?: SoundInstance;
+
   constructor() {
     super(vec3(0, 0, 6), buildSphere(2));
     this.pos3D.y = terrain.getHeight(this.pos3D) + 1; // start on the ground
@@ -106,7 +116,7 @@ class Player extends EngineObject3D {
       ),
     );
   }
-  update() {
+  override update() {
     // arrow keys push it along the ground, forward is -Z
     const move = freeCamera ? vec2() : keyDirection(); // still while flying
     const push = vec3(move.x, 0, -move.y).scale(.02);
@@ -148,7 +158,7 @@ class Player extends EngineObject3D {
 // orbs to collect, each one a light with a burst when it is taken
 
 class Orb extends EngineObject3D {
-  constructor(pos) {
+  constructor(pos: Vector3) {
     super(pos, render3D.sphereMesh);
     this.scale3D = vec3(1.4);
     this.color = hsl(worldRandom.float(), 1, .6);
@@ -156,7 +166,7 @@ class Orb extends EngineObject3D {
     this.angleVelocity3D = vec3(.01, .02, 0);
     this.addChild(new Light3D(vec3(), 12, this.color));
   }
-  update() {
+  override update() {
     // bob in place until the player reaches it
     const bob = sin(time * 2 + this.pos3D.x) * .3;
     this.pos3D.y = terrain.getHeight(this.pos3D) + 2 + bob;
