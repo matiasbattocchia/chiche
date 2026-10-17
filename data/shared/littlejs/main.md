@@ -153,9 +153,11 @@ everywhere.
   gamepad overlay covers the bottom of the screen on both sides: the HUD goes at the top, and
   nothing the player must see sits in the bottom corners. A game that needs width (a side-scroller,
   a road to race along) is a landscape game: say so in the result, so the user turns the phone.
-- A step about touch or layout is tried as a phone too, in a second window of its own session:
-  `playwright-cli -s=phone open --headed --mobile <url>`. It is closed when done, with
-  `playwright-cli -s=phone close`; the user's window stays.
+- A step about touch or layout is tried as a phone too, by you alone: a browser of its own session,
+  with no window, `playwright-cli -s=phone open --mobile <url>`, looked at with
+  `playwright-cli -s=phone screenshot`, and closed when done with `playwright-cli -s=phone close`;
+  the user's window stays. The phone is a check of yours, not a step of the plan nor a question for
+  the user.
 
 ## Helper modules
 

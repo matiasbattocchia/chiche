@@ -27,6 +27,14 @@ it changes: `{ "emoji": "🏓", "title": "Pong", "description": "Pelotita y pale
 escape." }`, a picture and a few words in the user's language. It is what shows the project
 among the others.
 
+## Publishing
+
+Publishing a project puts it on https://rubi.games, among the user's other projects, with its
+`card.json` showing it there: `(cd ../.. && deno task publish <name>)` builds it and puts it at
+`https://rubi.games/<name>/`, replacing what was there. After a change, it is published again for
+the site to show it. That is the only way a project goes online: no other host, and nothing created
+in a cloud account, whatever the message names.
+
 `playwright-cli --help [command]` tells the rest. It writes its files (console logs, snapshots,
 screenshots, and a file you name with `--filename`) in `.playwright-cli/` in the shared folder,
 where your shell starts, whatever folder it is in now: the paths it prints are relative to the
