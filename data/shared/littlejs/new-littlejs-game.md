@@ -18,7 +18,7 @@ Start a new LittleJS game by copying the closest **example game** out of `little
 ## Step 1 — Up to 3 quick questions (never blocking)
 
 1. **Game name** (camelCase, e.g. `memoryMatch`) — the project's folder, `projects/<name>/`. If they don't care, propose one.
-2. **Core mechanic / genre** in one line — enough to pick the template (Step 2).
+2. **Genre and goal** — one of `littlejs/main.md`'s genres, with its goal; the first message names them. It picks the template (Step 2), and the controls' scheme.
 3. **Does it need a title/pause menu now or later?** (decides whether to wire `menus.ts` from the start.)
 
 **These questions must never stall the scaffold.** Ask them only in an interactive back-and-forth where an answer can actually arrive. If the request already implies the answers ("make me a pong game" → name `pong`, arcade paddle game, no menu yet), or you are in a one-shot / non-interactive / headless run where the user cannot reply, pick sensible defaults and go straight to Step 2. Never end a turn having only asked questions — start the project and show it first, then say what you assumed and offer to change it.
@@ -61,7 +61,7 @@ Combine rows freely — `gameFx.ts` stacks onto any other choice. A template's i
 ## Step 3 — Scaffold
 
 1. Copy the chosen starter folder to the project: `cp -r littlejs/examples/<starter> projects/<name>`.
-2. Copy each helper module chosen in Step 2 into `projects/<name>/templates/` (only the ones needed, not all of them), with the helpers they import.
+2. Copy `controls.ts` and `difficulty.ts` into `projects/<name>/templates/`, every game has them, and each helper module chosen in Step 2 (only the ones needed, not all of them), with the helpers they import.
 3. `index.html` — retitle it. It loads `game.ts` as a module and nothing else, except Box2D's wasm loader, a plain script before it in `box2dGame`:
 
    ```html
@@ -83,9 +83,9 @@ Combine rows freely — `gameFx.ts` stacks onto any other choice. A template's i
 
 **Never substitute a CDN for the LittleJS engine.** The engine is the npm package in the project's `node_modules/`. If `deno install` fails, STOP and tell the user plainly that the scaffold is incomplete and why. Do not paper over it with a CDN `<script src>`. A 3D game needs no CDN either — LittleJS 3D is inside the engine file. Confirm no `<script src>` in `index.html` points at an external URL, and that `game.ts` imports only `'littlejsengine'` and its own files.
 
-**Never review, verify, or summarize the contents of the engine or of the helper modules you copied** — they are third-party code. The game code you wrote is the only thing that deserves review.
+**Never review, verify, or summarize the contents of the engine or of the helper modules you copied** — they are third-party code, all but `controls.ts` and `difficulty.ts`, which are checked and linted with the game. The game code you wrote is the only thing that deserves review.
 
-Then serve it and show it, as for any web project, and in the same turn make it playable: the first step in `littlejs/main.md`, the player moving with the keys over a plain world, with a particle effect. A few dozen lines, plain shapes, rough is fine. End the turn there, with what to try and the plan.
+Then serve it and show it, as for any web project, and in the same turn make it playable: the first step in `littlejs/main.md`, the player moving through `controls.ts` with the genre's scheme over a plain world, with a particle effect. A few dozen lines, plain shapes, rough is fine. End the turn there, with what to try and the plan.
 
 ## Step 4 — One step per turn
 

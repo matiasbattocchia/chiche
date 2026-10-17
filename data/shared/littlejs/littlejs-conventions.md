@@ -18,7 +18,7 @@ class Player extends EngineObject {
     super(pos, vec2(1), tile(0), 0, CYAN); // pos, size, tileInfo, angle, color
   }
   override update() {
-    this.velocity = keyDirection().scale(.2); // arrows/WASD move the player
+    this.velocity = moveInput().scale(.2); // arrows/WASD, a gamepad, the touch cross
     // engine applies physics (velocity, gravity, collision) after update()
     // no super.update() call is needed
   }
@@ -33,7 +33,7 @@ Spawn once in `gameInit` with `new Player(vec2(0))`; it draws itself — no manu
 class Car extends EngineObject {
   speed = 0;
   override update() {
-    const input = keyDirection(); // y: gas and brake, x: steering
+    const input = moveInput(); // y: gas and brake, x: steering
     this.speed = clamp(this.speed + input.y * .01, -.1, .3); // units per frame
     this.angle += input.x * .05 * sign(this.speed); // right turns right, backing up too
     this.velocity = vec2().setAngle(this.angle, this.speed);
@@ -49,14 +49,13 @@ class Car extends EngineObject {
 - Import every engine name `game.ts` uses, in the one `import { … } from 'littlejsengine';` at its top; add a name there when you start using it. A name used without its import is a `ReferenceError` when the game loads, and `deno check game.ts` names it before that.
 - The engine's settings — `cameraPos`, `cameraScale`, `gravity`, `paused`, `timeScale`, `canvasClearColor`, `canvasFixedSize`, `debugWatermark`, `tilesPixelated`, ... — can be read through their imports, which follow every change, but not assigned: an import is read-only, and `cameraScale = 32` throws. Each one has a setter: `setCameraScale(32)`, `setGravity(vec2(0, -.02))`, `setPaused(true)`, `setDebugWatermark(false)`. The reference lists settings as `name = default`; set one with `setName(value)`.
 - The game's own top-level names live in `game.ts`'s module, apart from the engine's, so none of them replaces an engine name. Declaring a name that is also imported is an error at load: give your own things names of their own (`playerGravity`, `gameTime`); `score` and `level` are fine.
-- The helper modules copied from `littlejs/templates/` (`menus.ts`, `textureGenerator.ts`, `gameFx.ts`, `cards.ts`) export what they define; import from them the names the game uses, e.g. `import { initDefaultAtlas } from './templates/textureGenerator.ts';`. A helper's own imports bring in the helpers it needs.
+- The helper modules copied from `littlejs/templates/` (`controls.ts`, `difficulty.ts`, `menus.ts`, `textureGenerator.ts`, `gameFx.ts`, `cards.ts`) export what they define; import from them the names the game uses, e.g. `import { initDefaultAtlas } from './templates/textureGenerator.ts';`. A helper's own imports bring in the helpers it needs.
 - A module's variables can't be reached from the browser console or by name. To drive the game from outside while testing, put hooks on `globalThis` (`Object.assign(globalThis, { game: { player, spawnEnemy } });`).
 - It is TypeScript, checked strictly. A top-level `let` gets a value or a type where it is declared (`let ball = vec2();`, `let player: Player;`), a class declares the fields it adds (`speed = 0;`, `timer: Timer;`), and the methods the engine calls on an object (`update`, `render`, `collideWithObject`) are marked `override`. Engine types such as `Vector2` and `Color` are imported with the rest, as `type Vector2` when only the type is used.
 
 ## Use the engine's built-ins — don't reinvent
 
-- `keyDirection()` for ALL arrow/WASD directional input (returns a vec2) — never write manual arrow-key OR chains. WASD is already included (`inputWASDEmulateDirection` defaults to true), so don't wire it by hand. `keyIsDown()` is for non-directional actions (jump, interact).
-- `gamepadStick(0)` for analog movement/aim; `mousePos` (world-space), `mouseWasPressed(0)` / `mouseIsDown(0)` for the mouse.
+- Input goes through the game's `templates/controls.ts` (`littlejs/main.md`, Controls and devices): `moveInput()` for ALL moving, which reads `keyDirection()` (the arrows and WASD), a gamepad's stick and cross, and the touch cross, and `actionPressed(i)` / `actionDown(i)` for the actions — never manual arrow-key OR chains, nor a key, a button or a tap read on its own. With the `point` scheme, `pointerPressed()` / `pointerHeld()` are the finger or the mouse in world space.
 - `isOverlapping(posA, sizeA, posB, sizeB)` for AABB hit tests; `isOnScreen()` for culling; `screenToWorld()` / `worldToScreen()` for coordinate conversion; `Timer` for timed events.
 - Math: `clamp`, `lerp`, `percent`, `rand`, `randInt`, and `Vector2` methods (`add`, `scale`, `distance`, `normalize`, `rotate`, ...) — don't rewrite them.
 - Sound: `Sound` / `zzfx()` (ZzFX) — never write custom WebAudio code.

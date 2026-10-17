@@ -11,12 +11,13 @@ the user asks for a game and names no other engine or framework, make it with Li
 Core goals
 
 - Turn a game idea into a working LittleJS game quickly.
+- A game is of one genre, with a goal: something to reach, something that can go wrong on the way.
 - Keep scope right-sized: get a fun playable core loop first, then expand.
 - Work in small steps: the first turn ends with something to play, and each later turn adds one
   small thing to it.
 
-Everything for it is in `littlejs/`, in the shared folder. It is read-only: copy out of it,
-never write into it.
+Everything for it is in `littlejs/`, in the shared folder. It is read-only: copy out of it, never
+write into it.
 
 - `littlejs/new-littlejs-game`: the skill for a new game, with which example to copy, which template
   to read patterns from, and the steps.
@@ -28,15 +29,50 @@ never write into it.
 - `littlejs/examples/`: the starter projects. `littlejs/templates/`: pages to read patterns from,
   and the helper modules.
 
+## The game: a genre and a goal
+
+A game is of one genre, picked from the user's first idea. They don't know genres by name: the voice
+has said it to them in their words ("the ants want your soda, and you keep it safe until night?"),
+and the first message names it. The genre is what keeps it a game: a goal to reach, a way to fail on
+the way, and the tries the difficulty counts. It also gives the actions and how the phone plays it.
+
+| Genre    | Goal                                                           | A try                        | Harder with                  | Actions                         | Phone            |
+| -------- | -------------------------------------------------------------- | ---------------------------- | ---------------------------- | ------------------------------- | ---------------- |
+| Defend   | Keep something safe until a time, or for some waves            | A wave held                  | More, faster attackers       | Space, or a tap: build or shoot | `point`, upright |
+| Collect  | Gather the things in a field or a maze before time or a chaser | A thing reached, or a round  | Faster chasers, less time    | None, or Space: a dash          | `point`, upright |
+| Platform | Reach the flag at the end, over gaps and baddies               | A gap or a baddie passed     | Wider gaps, faster baddies   | Space: jump. X: throw           | `pad`, sideways  |
+| Race     | Finish the laps first                                          | A lap, ahead of the others   | Faster rivals                | Space: boost. X: throw          | `pad`, sideways  |
+| Runner   | Reach the end of a run that comes at you                       | An obstacle passed           | More speed, closer obstacles | Space: jump. X: duck            | `tap`, upright   |
+| Puzzle   | Solve the board                                                | A board solved               | More pieces, more colors     | None: tap the pieces            | `point`, upright |
+| Shooter  | Clear the waves of ships, dodging their shots                  | A wave cleared without a hit | More ships, faster shots     | Space: shoot, or while dragging | `point`, upright |
+
+- The plan starts with the loop: the player moving (the first turn), then the goal and how it shows
+  (a star, a flag, the soda's level), the way to fail, and the difficulty, before anything else. A
+  step that adds nothing to the loop (a moon, a glow) comes after, when the user picks it: the
+  default next step goes toward the goal.
+- An idea goes into the game through its genre: a new thing to collect, a new baddie, a place, a
+  look, a prize. An idea that is another game becomes something of this one (a car in the platformer
+  is a platform to ride) or waits for a game of its own. The actions stay few: a new one takes the
+  place of one, or shares its key.
+- Nothing wins without playing: no endless lives, ammo or soda, no taking away what makes it hard,
+  no blast that clears the screen, no player that plays by itself (walks to the targets, aims for
+  you). A request for one comes earned and short ("three stars give five seconds of endless soda");
+  one for less challenge ("no ants") is the difficulty's, which eases off by itself when tries fail.
+  Say so in the result, in the user's terms.
+- The difficulty is `templates/difficulty.ts`: `new Difficulty('gameName')`, `record(ok)` after each
+  try the genre counts, and what makes the game hard read through `at(easiest, hardest)`
+  (`antSpeed = difficulty.at(1, 4)`). It keeps about 85% of the tries going well, and it is felt,
+  not shown.
+
 ## Small steps
 
 A five-year-old is waiting, and what keeps them waiting is something to play with. Put it in front
 of them in the first turn, then give them something new in it every minute or two.
 
 - The first turn ends with the game playable, however rough: the starter copied, and in its
-  `game.ts` the player, a plain shape or icon, moving with the keys over a plain world (a grid of
-  colored squares, a road, a floor), with a particle effect when it does something. A few dozen
-  lines.
+  `game.ts` the player, a plain shape or icon, moving over a plain world (a grid of colored squares,
+  a road, a floor) through `templates/controls.ts` with the genre's scheme, with a particle effect
+  when it does something. A few dozen lines.
 - Each later turn is one step on top of that: one thing the user sees or tries, tens of lines, not
   hundreds. Each engine feature is a step of its own (tiles, physics, a rule and its score,
   particles, sound, the camera), and so is each of the game's own things, and each detail of one: a
@@ -56,22 +92,21 @@ End each turn saying what to try, the next step of the plan, and one choice abou
 idea for it, in the user's terms: two ways it could go ("the Pokémon walk around the kitchen, or
 peek out from behind the plates?"), or something the game could have that nobody asked for ("eggs
 left too long could burn"). What you can't decide alone (which key cracks the eggs) is that choice:
-take a default, and ask. The answer comes with a later message; until then the plan stands. For "a
-super fast car with a gun on top that shoots dynamite with space, a boost on B, and slow cars to
-race", the first turn makes step 1 and ends with this plan:
+take a default, and ask. The choice is about the game, never about its keys or the phone's buttons:
+the genre settles those. The answer comes with a later message; until then the plan stands. For "a
+super fast car with a gun on top that shoots dynamite, a boost, and slow cars to race", a race, the
+first turn makes step 1 and ends with this plan:
 
-1. 🏎️ A red car drives on green grass with the arrows, dust behind it. (done: try it)
-2. 🛣️ A gray road loop to drive on.
-3. 🎥 The camera follows the car.
-4. 🧨 Space throws a dynamite forward; it blows up after a second.
-5. 🚗 Two slow cars drive along the road.
-6. 💥 A dynamite that hits a car sends it spinning, with smoke.
-7. 🔥 B: a boost, with fire behind.
-8. 🔊 The engine's and the dynamite's sounds.
-9. 🏁 Laps, and a star for finishing first.
+1. 🏎️ A red car drives on green grass with the arrows or the cross, dust behind it. (done: try it)
+2. 🛣️ A gray road loop with a 🏁 line: three laps and it ends.
+3. 🚗 Two cars race you, and finishing first gives a ⭐.
+4. 🎚️ The other cars go faster after you win, slower after you lose.
+5. 🧨 X throws a dynamite forward; a car it hits spins out, with smoke.
+6. 🔥 Space: a boost, with fire behind, that fills up again slowly.
+7. 🔊 The engine's and the dynamite's sounds.
 
-Next is step 2, the road: straight, or a loop that comes back to the start? And an idea: a puddle
-that makes the car slide.
+Next is step 2, the road: round like an oval, or with sharp turns? And an idea: a puddle that makes
+the car slide.
 
 Then the user says "a motorcycle!" while you make step 2: the road goes on, the motorcycle is a step
 in the plan, and the turn ends with the road.
@@ -86,8 +121,8 @@ in the plan, and the turn ends with the road.
 - Detail nobody asked for: kerbs, tire stacks and grid slots on a track, mirrors and a plate on a
   motorcycle. Plain shapes first; detail is a step the user picks.
 - A shell lost in another folder: a `cd` stays, so run a project's commands as
-  `(cd projects/<name> && …)` and stay in the shared folder, where the `.playwright-cli/`
-  paths resolve.
+  `(cd projects/<name> && …)` and stay in the shared folder, where the `.playwright-cli/` paths
+  resolve.
 
 ## How a game differs from other web projects
 
@@ -97,10 +132,10 @@ in the plan, and the turn ends with the road.
   `'littlejsengine'` and the rest of the game's modules. Split it into modules (`player.ts`,
   `ui.ts`, `constants.ts`) as it grows.
 - Feedback: type check with `deno check game.ts`, against the engine's typings, strictly (the
-  starter's `deno.json`), and lint with `deno lint game.ts` and the game's other
-  modules. Not `deno task build`: nothing serves its `dist/`, which leaves out the Box2D loader and
-  the images `engineInit` loads. The helper modules in `templates/` are third-party: don't lint,
-  check or review them.
+  starter's `deno.json`), and lint with `deno lint game.ts` and the game's other modules,
+  `templates/controls.ts` and `templates/difficulty.ts` among them. Not `deno task build`: nothing
+  serves its `dist/`, which leaves out the Box2D loader and the images `engineInit` loads. The other
+  helper modules in `templates/` are third-party: don't lint, check or review them.
 - Looking up an engine name: `littlejs/reference.md` first, then the engine's typings,
   `node_modules/littlejsengine/dist/littlejs.d.ts`. Never read the engine's source
   (`littlejs.esm.js`, `littlejs.js`): it costs minutes and the typings say what a call takes.
@@ -126,33 +161,32 @@ in the plan, and the turn ends with the road.
 
 ## Controls and devices
 
-The game is played on the laptop with the keyboard, on a phone or a tablet with two thumbs, and with
-a gamepad: one game, three ways in. Build for the phone first: what works under two thumbs works
-everywhere.
+The game is played on a phone or a tablet first, and on the laptop's keyboard and with a gamepad as
+well: one game, three ways in. `templates/controls.ts` makes them one: every game copies it in the
+first turn, and reads moving and its actions only through it.
 
-- A game is moving and at most four actions. Moving is `keyDirection()` (the arrows and WASD) or
-  `gamepadStick(0)` (a gamepad's left stick, and the touch gamepad's, which is gamepad 0 once
-  touched): take whichever isn't zero. An action is one key and one gamepad button, 0 to 3, read
-  together in one place: `keyWasPressed('KeyC') || gamepadWasPressed(0)`. The touch gamepad's
-  right-side buttons are those same buttons, 0 to 3: `setTouchGamepadButtonCount(n)` with the game's
-  number of actions (1 is a single large button).
-- The same key for a thing and its undoing (in and out of the tank), one key at a time (no two
-  together), none that moving uses (the arrows, W A S D), keys near each other. A request that
-  brings a fifth action or a key that clashes gets the warning in the result, with the fix you
-  propose: the user can't see the clash.
-- A game with moving or more than one action turns the touch gamepad on in `gameInit`:
-  `setTouchGamepadEnable(true)`, and `setTouchGamepadDisplayTime(0)` so it stays on screen. A game
-  with a single action and no moving (tap to flap) takes a tap instead, `mouseWasPressed(0)` beside
-  its key, since a touch is a mouse to the engine, and no touch gamepad.
-- The key drawn on screen beside an action's icon is the device's: the key's letter while the
-  keyboard was used last (`usingKeyboardInput()`), the button's number, 0 to 3, on a touch device
-  (`isTouchDevice`) or with a gamepad (`usingGamepadInput()`).
-- Lay the game out for a tall, narrow screen first: the phone held upright, and the laptop window
-  beside the terminal. The canvas takes the window's size, so keep the playfield whole with
-  `setCameraScale(min(mainCanvasSize.x / viewW, mainCanvasSize.y / viewH))` each frame. On touch the
-  gamepad overlay covers the bottom of the screen on both sides: the HUD goes at the top, and
-  nothing the player must see sits in the bottom corners. A game that needs width (a side-scroller,
-  a road to race along) is a landscape game: say so in the result, so the user turns the phone.
+- `controlsInit(scheme, icons)` at the top of `gameInit`: the genre's scheme, and an icon for each
+  action, the main one first. `moveInput()` is moving (the arrows and WASD, a gamepad, the touch
+  cross); `actionPressed(i)` and `actionDown(i)` are an action (its key, its gamepad button, its
+  button on the phone). With `point`, `pointerPressed()` is where a tap landed and `pointerHeld()`
+  where the finger is, in world space; on the laptop they are the mouse.
+- The schemes. `pad`: a cross under the left thumb and the buttons under the right, the phone held
+  sideways. `point`: one finger on the upright phone; a tap is where to go or what to act on, a
+  finger held down drags, and the action buttons are tapped. `tap`: the whole upright screen is the
+  main action, and with a second, its left half is that one.
+- Two actions: Space and X. A third (C) and a fourth (Z) only when the genre can't go without them
+  and no key can take them on by what fits: say why in the result. Keys are few: a thing and its
+  undoing share one (in and out of the tank), one key does what fits where the player is (Space
+  builds on free ground and goes in at a door), and never two keys together. A request that brings a
+  third action, or a key of its own, gets the fix you propose in the result: the user can't see the
+  clash.
+- `drawControls()` in `gameRenderPost` draws each action's icon on its button, at the bottom right,
+  with its key beside it while the keyboard plays. The HUD goes at the top, and nothing the player
+  must see sits in the bottom corners, under the thumbs and the buttons.
+- Lay the game out for its phone: upright for `point` and `tap`, like the laptop window beside the
+  terminal. The canvas takes the window's size, so keep the playfield whole with
+  `setCameraScale(min(mainCanvasSize.x / viewW, mainCanvasSize.y / viewH))` each frame. A `pad` game
+  is played sideways: say so in the result, so the user turns the phone.
 - A step about touch or layout is tried as a phone too, by you alone: a browser of its own session,
   with no window, `playwright-cli -s=phone open --mobile <url>`, looked at with
   `playwright-cli -s=phone screenshot`, and closed when done with `playwright-cli -s=phone close`;
@@ -165,6 +199,8 @@ They are not part of the engine. To use one, copy it from `littlejs/templates/` 
 `templates/` folder and import from it. Grep the engine's `littlejs.d.ts` before taking a name for
 engine API.
 
+- `controls.ts` and `difficulty.ts`: the controls and the difficulty, above. Every game has both.
+  They are the games' own, typed and checked with the game.
 - `menus.ts`: title, pause and options menus, dialogs, toolbars, toasts and medals; don't build DOM
   menus by hand. `createTitleMenu`, `createPauseMenu`, `createOptionsMenu`, `createMenu`,
   `createToolbar`, `showConfirmDialog`, `showAlertDialog`, `showGameOverDialog`, `MenuMedal`. Pause
