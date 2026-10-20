@@ -23,4 +23,45 @@
   addEventListener("popstate", () => log("back/forward", location.href));
   addEventListener("hashchange", () => log("hash", location.href));
   addEventListener("DOMContentLoaded", () => log("load", location.href));
+  // a gamepad, which sends no events but its connecting: each button once per press, by its
+  // index (what gamepadWasPressed reads) and its name on an Xbox pad, and each stick when it
+  // points somewhere new, as one of eight directions
+  const BUTTONS = "A B X Y LB RB LT RT View Menu L3 R3 Up Down Left Right Xbox".split(" ");
+  const was = new Map();
+  let polling = false;
+  const direction = (x, y) => {
+    if (Math.hypot(x, y) < .5) return "";
+    const way = ["right", "down-right", "down", "down-left", "left", "up-left", "up", "up-right"];
+    return way[(Math.round(Math.atan2(y, x) / (Math.PI / 4)) + 8) % 8];
+  };
+  const poll = () => {
+    for (const pad of navigator.getGamepads()) {
+      if (!pad) continue;
+      const before = was.get(pad.index) ?? { buttons: [], sticks: [] };
+      const now = {
+        buttons: pad.buttons.map((b) => b.pressed),
+        sticks: [0, 2].filter((a) => a + 1 < pad.axes.length)
+          .map((a) => direction(pad.axes[a], pad.axes[a + 1])),
+      };
+      now.buttons.forEach((down, i) => {
+        if (down && !before.buttons[i]) {
+          log("pad", `button ${i}`, pad.mapping == "standard" ? BUTTONS[i] ?? "" : "");
+        }
+      });
+      now.sticks.forEach((way, i) => {
+        if (way && way != before.sticks[i]) log("pad", `stick ${i}`, way);
+      });
+      was.set(pad.index, now);
+    }
+    requestAnimationFrame(poll);
+  };
+  addEventListener("gamepadconnected", (e) => {
+    log("pad connected", e.gamepad.id);
+    if (!polling) requestAnimationFrame(poll);
+    polling = true;
+  });
+  addEventListener("gamepaddisconnected", (e) => {
+    log("pad disconnected", e.gamepad.id);
+    was.delete(e.gamepad.index);
+  });
 })();
