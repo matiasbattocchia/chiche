@@ -16,7 +16,7 @@ import { encodeHex } from "@std/encoding/hex";
 import { dirname, fromFileUrl, join } from "@std/path";
 import { TextLineStream } from "@std/streams";
 import { Audio, type Device, type Mixer, mixer, unmute, VOICE_RATE, watchMixer } from "./audio.ts";
-import { INPUT_TOOL, MODEL, Scheduling, Voice } from "./gemini.ts";
+import { COMPRESSION, INPUT_TOOL, MODEL, Scheduling, type UsageMetadata, Voice } from "./gemini.ts";
 import { keyCode, keyName, Keys } from "./keys.ts";
 import { clip, Door, errorOf, headingsOf, isReply, isSaying, textOf, toolUseOf } from "./liquen.ts";
 import { Log } from "./log.ts";
@@ -192,8 +192,9 @@ const instructions = await Deno.readTextFile(join(ROOT, "INSTRUCTIONS.md")).then
  * it, remembering what was said. Google's session docs: "Resumption tokens are valid for 2 hr
  * after the last sessions termination". A resumed session keeps the system instruction it
  * started with (measured, see gemini.ts), so a changed INSTRUCTIONS.md, input tool, language,
- * model or --vad starts a new one, and so does --fresh. One per --session name, all in one file (log/
- * keeps its folders for the runs).
+ * model or --vad starts a new one, and so does --fresh. So does a changed compression: whether a
+ * resumed session takes a new one is not measured. One per --session name, all in one file
+ * (log/ keeps its folders for the runs).
  */
 const SESSIONS = join(ROOT, "log", "sessions.json");
 /** The 2 hours, less a margin for the clocks. */
@@ -209,7 +210,14 @@ const sessionKey = encodeHex(
   await crypto.subtle.digest(
     "SHA-256",
     new TextEncoder().encode(
-      JSON.stringify({ instructions, tool: INPUT_TOOL, language, vad, model: MODEL }),
+      JSON.stringify({
+        instructions,
+        tool: INPUT_TOOL,
+        language,
+        vad,
+        model: MODEL,
+        compression: COMPRESSION,
+      }),
     ),
   ),
 );
@@ -342,6 +350,11 @@ async function teardown(code = 0) {
     await up.liquen.status.catch(() => {});
   }
   if (up.browser && await up.browser) await playwright("close");
+  log.line(
+    "usage",
+    `run: ${spend.turns} turns, ${spend.mute} with no audio · prompt ${spend.prompt} ` +
+      `(audio ${spend.promptAudio}) · out audio ${spend.outAudio}`,
+  );
   log.close();
   term.unpin();
   Deno.exit(code);
@@ -997,6 +1010,55 @@ async function sendTail() {
   log.line("session", `sent the log's tail as context: ${n} lines, ${tail.length} chars`);
 }
 
+/**
+ * What went to the voice since its last turn: `user` (the mic closing), `text`, `tail` (the
+ * log's past), and each answer to the input call by its first word and scheduling
+ * (`working/SILENT`). Each turn's `usage` line carries it, to tell which of them wake a turn that
+ * says nothing: in prueba6, 75 turns of 309 had no audio and read 2.65M tokens of the 10.4M.
+ */
+const sentSince = new Map<string, number>();
+/** The run's turns, as the server counts them. */
+const spend = { turns: 0, mute: 0, prompt: 0, promptAudio: 0, outAudio: 0 };
+
+function tally(message: unknown) {
+  const m = message as {
+    activityEnd?: unknown;
+    text?: unknown;
+    clientContent?: unknown;
+    toolResponse?: {
+      functionResponses?: { response?: { output?: unknown }; scheduling?: unknown }[];
+    };
+  };
+  const kinds = m.activityEnd
+    ? ["user"]
+    : m.text !== undefined
+    ? ["text"]
+    : m.clientContent
+    ? ["tail"]
+    : (m.toolResponse?.functionResponses ?? []).map((r) =>
+      `${String(r.response?.output ?? "").match(/^\w+/)?.[0] ?? "?"}/${r.scheduling ?? "-"}`
+    );
+  for (const k of kinds) sentSince.set(k, (sentSince.get(k) ?? 0) + 1);
+}
+
+function usage(u: UsageMetadata) {
+  const count = (details?: { modality?: string; tokenCount?: number }[]) =>
+    Object.fromEntries((details ?? []).map((d) => [d.modality, d.tokenCount ?? 0]));
+  const prompt = u.promptTokenCount ?? 0, promptAudio = count(u.promptTokensDetails).AUDIO ?? 0;
+  const outAudio = count(u.responseTokensDetails).AUDIO ?? 0;
+  spend.turns++;
+  if (!outAudio) spend.mute++;
+  spend.prompt += prompt, spend.promptAudio += promptAudio, spend.outAudio += outAudio;
+  const since = [...sentSince].map(([k, n]) => n > 1 ? `${k}×${n}` : k).join(", ");
+  sentSince.clear();
+  log.line(
+    "usage",
+    `prompt ${prompt} (audio ${promptAudio}) · out audio ${outAudio}` +
+      `${u.thoughtsTokenCount ? ` · thoughts ${u.thoughtsTokenCount}` : ""}` +
+      `${outAudio ? "" : " · mute"} · since: ${since || "nothing"}`,
+  );
+}
+
 // 5. Gemini
 const last = lastSession();
 /** The voice picked up the last run's session. */
@@ -1010,7 +1072,11 @@ up.voice = await Voice.start({
   vad,
   resume: "handle" in last ? last.handle : undefined,
   on: {
-    trace: (d, m) => log.gemini(d, m),
+    trace(d, m) {
+      log.gemini(d, m);
+      if (d === "send") tally(m);
+    },
+    usage,
     connected(how) {
       link = "live";
       if (how === "resumed") resumed = true;

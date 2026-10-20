@@ -17,11 +17,21 @@ import {
   Modality,
   type Session,
   Type,
+  type UsageMetadata,
 } from "@google/genai";
 import { decodeBase64, encodeBase64 } from "@std/encoding/base64";
 
 export const MODEL = "gemini-3.8-live";
 export { FunctionResponseScheduling as Scheduling };
+export type { UsageMetadata };
+
+/**
+ * Every turn reads the whole context again: in prueba6 (log/2026-10-20T20-53-16), with the
+ * server's defaults, it grew to 78k tokens before the window slid, 34k a turn on average. At 20k
+ * the window slides back to 10k, the oldest turns dropped; the plan and the work are the coding
+ * agent's to keep, not the voice's.
+ */
+export const COMPRESSION = { triggerTokens: "20000", slidingWindow: { targetTokens: "10000" } };
 
 const BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 30000];
 
@@ -65,6 +75,8 @@ export interface VoiceEvents {
   /** `withAudio`: the message carried audio too, as nearly every transcript chunk's does. */
   outputTranscript(text: string, finished: boolean, withAudio: boolean): void;
   turnComplete(): void;
+  /** What a turn read and wrote, as the server counts it. */
+  usage(usage: UsageMetadata): void;
   toolCall(call: ToolCall): void;
   toolCallCancelled(ids: string[]): void;
   trace(direction: "send" | "recv", message: unknown): void;
@@ -242,7 +254,7 @@ export class Voice {
       speechConfig: { languageCode: this.#o.language },
       inputAudioTranscription: {},
       outputAudioTranscription: {},
-      contextWindowCompression: { slidingWindow: {} },
+      contextWindowCompression: COMPRESSION,
       sessionResumption: { handle: this.#handle },
       // push to talk: the mic opening and closing mark the turn (activityStart / activityEnd);
       // with `vad`, left out: the server's detection is on by default
@@ -377,6 +389,7 @@ export class Voice {
       }
       if (c.turnComplete) on.turnComplete();
     }
+    if (m.usageMetadata) on.usage(m.usageMetadata);
     for (const fc of m.toolCall?.functionCalls ?? []) {
       if (fc.id && fc.name) on.toolCall({ id: fc.id, name: fc.name, args: fc.args ?? {} });
     }
