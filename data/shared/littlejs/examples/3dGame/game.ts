@@ -50,7 +50,7 @@ import {
   WHITE,
 } from "littlejsengine";
 
-// each tile in tiles.png has a 1 pixel border, which stops texture bleeding
+// each tile in public/tiles.png has a 1 pixel border, which stops texture bleeding
 setTileDefaultPadding(1);
 
 const terrainSize = 600, terrainHeight = 24, orbCount = 40;

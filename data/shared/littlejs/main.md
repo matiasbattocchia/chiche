@@ -26,6 +26,8 @@ write into it.
 - `littlejs/littlejs-api`: look an engine name up in `littlejs/reference.md` instead of guessing its
   arguments.
 - `littlejs/atlas-shape-art`: shapes and many round things, drawn as tinted tiles.
+- `littlejs/sprites`: the sheets a game's sprites come from, in `littlejs/sprites/`, and what each
+  tile shows.
 - `littlejs/examples/`: the starter projects. `littlejs/templates/`: pages to read patterns from,
   and the helper modules.
 
@@ -70,9 +72,9 @@ A five-year-old is waiting, and what keeps them waiting is something to play wit
 of them in the first turn, then give them something new in it every minute or two.
 
 - The first turn ends with the game playable, however rough: the starter copied, and in its
-  `game.ts` the player, a plain shape or icon, moving over a plain world (a grid of colored squares,
-  a road, a floor) through `templates/controls.ts` with the genre's scheme, with a particle effect
-  when it does something. A few dozen lines.
+  `game.ts` the player, a sprite or a plain shape, moving over a plain world (a grid of colored
+  squares, a road, a floor) through `templates/controls.ts` with the genre's scheme, with a particle
+  effect when it does something. A few dozen lines.
 - Each later turn is one step on top of that: one thing the user sees or tries, tens of lines, not
   hundreds. Each engine feature is a step of its own (tiles, physics, a rule and its score,
   particles, sound, the camera), and so is each of the game's own things, and each detail of one: a
@@ -119,7 +121,7 @@ in the plan, and the turn ends with the road.
   screen coordinates go: `littlejs/littlejs-conventions` has them.
 - `deno task build`: the dev server shows the game.
 - Detail nobody asked for: kerbs, tire stacks and grid slots on a track, mirrors and a plate on a
-  motorcycle. Plain shapes first; detail is a step the user picks.
+  motorcycle. A sprite or a plain shape first; detail is a step the user picks.
 - A shell lost in another folder: a `cd` stays, so run a project's commands as
   `(cd projects/<name> && …)` and stay in the shared folder, where the `.playwright-cli/` paths
   resolve.
@@ -134,8 +136,11 @@ in the plan, and the turn ends with the road.
 - Feedback: type check with `deno check game.ts`, against the engine's typings, strictly (the
   starter's `deno.json`), and lint with `deno lint game.ts` and the game's other modules,
   `templates/controls.ts` and `templates/difficulty.ts` among them. Not `deno task build`: nothing
-  serves its `dist/`, which leaves out the Box2D loader and the images `engineInit` loads. The other
-  helper modules in `templates/` are third-party: don't lint, check or review them.
+  serves its `dist/`. The other helper modules in `templates/` are third-party: don't lint, check or
+  review them.
+- An image the game loads goes in the project's `public/`, named in `engineInit`'s list by its file
+  alone (`"city.png"`): Vite serves `public/` at the page's root, and copies it into the build
+  `deno task publish` puts online. An image anywhere else is left out of that build.
 - Looking up an engine name: `littlejs/reference.md` first, then the engine's typings,
   `node_modules/littlejsengine/dist/littlejs.d.ts`. Never read the engine's source
   (`littlejs.esm.js`, `littlejs.js`): it costs minutes and the typings say what a call takes.
@@ -150,9 +155,10 @@ in the plan, and the turn ends with the road.
 ## Building a game
 
 - Ask only what blocks the work; otherwise start building.
-- No other libraries unless the user asks for one. No external assets (images, sprite sheets, sound
-  files) unless asked: draw with the engine and make sounds with ZzFX (`Sound`, or `SoundGenerator`
-  from `gameFx.ts`).
+- No other libraries unless the user asks for one.
+- Images are the sprites in `littlejs/sprites/` (the `littlejs/sprites` skill) and the shapes the
+  engine draws; sounds are ZzFX (`Sound`, or `SoundGenerator` from `gameFx.ts`). No image or sound
+  file from anywhere else: none from the web, none downloaded, none generated.
 - Use what LittleJS has before writing your own: `keyDirection()` for arrows and WASD, `keyIsDown()`
   for other keys, `gamepadStick()`, `isOverlapping`, `screenToWorld` / `worldToScreen`,
   `isOnScreen`, `Timer`, the math shortcuts and `Vector2` methods, `TileCollisionLayer` with

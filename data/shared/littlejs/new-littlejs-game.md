@@ -38,7 +38,7 @@ Copy base — pick the closest **example game folder** (under `littlejs/examples
 
 > These four are the only vetted starters — name them directly, don't glob for others.
 >
-> **3D always means the engine's built-in LittleJS 3D** (`Render3DPlugin`, `EngineObject3D`, `render3D`). It is part of the engine package — imported from `'littlejsengine'` like the rest, no CDN, no extra file. Do not use three.js unless the user asks for three.js by name. `3dGame/` is a full tour of the 3D plugin (a 600-unit island, a forest, orbs, bloom): copy it for the wiring, then cut its scene down to what the game needs. It also ships a small `tiles.png` for its sprites — keep it in `engineInit`'s image list, or delete both together if the game draws no sprites.
+> **3D always means the engine's built-in LittleJS 3D** (`Render3DPlugin`, `EngineObject3D`, `render3D`). It is part of the engine package — imported from `'littlejsengine'` like the rest, no CDN, no extra file. Do not use three.js unless the user asks for three.js by name. `3dGame/` is a full tour of the 3D plugin (a 600-unit island, a forest, orbs, bloom): copy it for the wiring, then cut its scene down to what the game needs. It also ships a small `public/tiles.png` for its sprites — keep it in `engineInit`'s image list, or delete both together if the game draws no sprites.
 
 Pattern source — pick the closest **template** (`littlejs/templates/*.html`):
 
@@ -62,6 +62,7 @@ Combine rows freely — `gameFx.ts` stacks onto any other choice. A template's i
 
 1. Copy the chosen starter folder to the project: `cp -r littlejs/examples/<starter> projects/<name>`.
 2. Copy `controls.ts` and `difficulty.ts` into `projects/<name>/templates/`, every game has them, and each helper module chosen in Step 2 (only the ones needed, not all of them), with the helpers they import.
+   A sprite sheet the game uses goes in `projects/<name>/public/` (the `littlejs/sprites` skill).
 3. `index.html` — retitle it. It loads `game.ts` as a module and nothing else, except Box2D's wasm loader, a plain script before it in `box2dGame`:
 
    ```html

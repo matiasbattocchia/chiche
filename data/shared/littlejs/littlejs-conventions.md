@@ -10,6 +10,7 @@ A LittleJS game here is an ES module: `index.html` loads `<script type=module sr
 ## Startup and structure
 
 - `engineInit(gameInit, gameUpdate, gameUpdatePost, gameRender, gameRenderPost, imageSources)` starts the engine — define all five callbacks even if some are empty. `gameInit` may be `async`; the engine awaits it (put `await box2dInit()` at the top of a Box2D game).
+- `imageSources` are files in the project's `public/`, each named by its file alone (`['city.png']`), and the sprites come from `littlejs/sprites/` (the `littlejs/sprites` skill). Each image's place in the list is its texture, the third argument of `tile(index, size, texture)`.
 - Model entities as classes extending `EngineObject` — the engine updates, moves, collides, and renders them automatically every frame:
 
 ```ts
@@ -86,3 +87,5 @@ class Car extends EngineObject {
 - Keep `\n` as a two-character escape inside string literals; don't convert to real line breaks.
 - A typical view is roughly 35x20 world units at the default camera scale. If you need a specific framing, set it explicitly with `setCameraScale` rather than guessing entity sizes against an unknown viewport.
 - Don't redefine the engine's math shortcuts or color constants; import them.
+- Sprites: without `setTileDefaultBleed(.5)` before `engineInit`, thin lines show between tiles at most sizes. `tile(index, size)` takes the sheet's tile size (16 by default, 18 and 24 on Pixel Platformer's sheets): another size picks other pixels, silently. `tilesPixelated` stays on, the default, or pixel art blurs.
+- An image outside `public/` loads on the dev server and is missing from the published game.
