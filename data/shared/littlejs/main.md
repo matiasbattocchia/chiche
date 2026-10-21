@@ -221,10 +221,12 @@ first turn, and reads moving and its actions only through it.
   headless with the phone's own events:
   `playwright-cli -s=phone eval "() => dispatchEvent(Object.assign(new Event('deviceorientation'), {beta: 60, gamma: -10}))"`,
   and a shake, `devicemotion` with `{acceleration: {x: 20, y: 0, z: 0}}`.
+- A game never edits its copy of `controls.ts`, `difficulty.ts` or `perspective.ts`. What the game
+  needs of them otherwise goes in its own code; what every game would want (a smaller button) goes
+  in the result, as an idea for the template.
 - A game that reads its input around `controls.ts` (its own `deviceorientation`, a key read by
   hand), or whose copy lacks what `littlejs/templates/controls.ts` has now, moves onto it in the
-  step that touches its controls: copy it again, with the game's own changes to its copy kept, and
-  the game's own reading goes.
+  step that touches its controls: copy it again over the old one, and the game's own reading goes.
 - Two actions: Space and X. A third (C) and a fourth (Z) only when the genre can't go without them
   and no key can take them on by what fits: say why in the result. Keys are few: a thing and its
   undoing share one (in and out of the tank), one key does what fits where the player is (Space

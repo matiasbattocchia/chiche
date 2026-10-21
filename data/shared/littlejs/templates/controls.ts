@@ -175,14 +175,20 @@ export function pointerHeld(): Vector2 | undefined {
 }
 
 /** In `gameRenderPost`: each action's icon on its button, at the bottom right (`tap` and `tilt`:
- *  the second at the bottom left), with its key drawn beside it while the keyboard is what plays.
+ *  the second at the bottom left), with its key drawn beside it while the keyboard is what plays,
+ *  small in the corner then, out of the game's way.
  *  On a phone with `pad` the buttons are the touch gamepad's, so only the icons are drawn on
  *  them. */
 export function drawControls() {
   const keyboard = !isTouchDevice || lastInputDevice == "keyboard";
   icons.forEach((icon, i) => {
-    const { pos, radius } = button(i);
-    const down = actionDown(i);
+    const b = button(i), down = actionDown(i);
+    // on the keyboard the button is only a reminder: small, in its corner
+    const radius = isTouchDevice ? b.radius : b.radius * .45;
+    const corner = vec2(sign(b.pos.x - mainCanvasSize.x / 2), 1);
+    const pos = isTouchDevice
+      ? b.pos
+      : b.pos.add(corner.scale(b.radius - radius));
     if (scheme != "pad" || !isTouchDevice) {
       drawCircle(
         pos,
