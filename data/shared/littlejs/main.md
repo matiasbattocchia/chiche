@@ -214,13 +214,17 @@ first turn, and reads moving and its actions only through it.
   main action, and with a second, its left half is that one. `tilt`, when the user asks to tilt or
   shake the phone: tilting the upright phone moves, a tap anywhere is the main action, and a shake
   is the second, whose button at the bottom left can be tapped too.
-- `tilt`: `moveInput()` is the tilt as a speed, which rolls; `tiltInput()` is it as a place, for an
-  aim that comes back to the middle with the phone. Straight is how the phone was held at the start,
-  and `tiltStraight()` makes it how it is held now (after a pause). How it feels is settled in
-  `controls.ts`: a request for less sensitive is a wider `TILT_RANGE` in the game's copy, one for
-  the other way is a sign in the game. Tried headless with the phone's own events:
-  `playwright-cli -s=phone eval "() => dispatchEvent(Object.assign(new Event('deviceorientation'), {beta: 70, gamma: 20}))"`,
+- `tilt`: the phone at rest is held as a game is, leaning back 45°, and tilts fully at 30° and 60°,
+  and 10° to either side. `tiltInput()` is where its back points, as a bottle's spout held in both
+  hands, for an aim that comes back to the middle with the phone; `moveInput()` is downhill, where a
+  ball on it rolls. A request for less sensitive is a wider `TILT_RANGE` in the game's copy. Tried
+  headless with the phone's own events:
+  `playwright-cli -s=phone eval "() => dispatchEvent(Object.assign(new Event('deviceorientation'), {beta: 60, gamma: -10}))"`,
   and a shake, `devicemotion` with `{acceleration: {x: 20, y: 0, z: 0}}`.
+- A game that reads its input around `controls.ts` (its own `deviceorientation`, a key read by
+  hand), or whose copy lacks what `littlejs/templates/controls.ts` has now, moves onto it in the
+  step that touches its controls: copy it again, with the game's own changes to its copy kept, and
+  the game's own reading goes.
 - Two actions: Space and X. A third (C) and a fourth (Z) only when the genre can't go without them
   and no key can take them on by what fits: say why in the result. Keys are few: a thing and its
   undoing share one (in and out of the tank), one key does what fits where the player is (Space

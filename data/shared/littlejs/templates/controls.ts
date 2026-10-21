@@ -56,11 +56,13 @@ let scheme: Scheme = "pad";
 let icons: string[] = [];
 let pressOnButton = false; // the finger now down went down on an action button
 
-// `tilt`: the phone's tilt from how it was held at the start, in degrees, smoothed; and its shakes
-let tilt: Vector2 | undefined, held: Vector2 | undefined;
+// `tilt`: the phone's angles (gamma across, beta forward and back), in degrees, smoothed; and its
+// shakes
+let tilt: Vector2 | undefined;
 let shaken = false, shakeFrame = -1, lastShake = 0;
-const TILT_RANGE = vec2(40, 25); // degrees to the side, and forward or back, that tilt fully
-const TILT_DEAD = 3; // degrees around straight that move nothing
+const TILT_REST = vec2(0, 45); // how a game is held: level across, leaning back 45°
+const TILT_RANGE = vec2(10, 15); // degrees from rest that tilt fully: -10 to 10, 30 to 60
+const TILT_DEAD = 1; // degrees around rest that move nothing
 const SHAKE = 15; // m/s², a shake: a hand's quick jerk, not a walk
 
 /** In `gameInit`: the genre's scheme, and an icon for each action, the main one first. */
@@ -80,10 +82,9 @@ export function controlsInit(controlsScheme: Scheme, actionIcons: string[]) {
 function tiltInit() {
   addEventListener("deviceorientation", (e) => {
     if (e.gamma === null || e.beta === null) return;
-    // gamma: the right side down, beta: the top edge back, toward the player
+    // gamma: the right edge down, beta: the top edge back, toward the player
     const now = vec2(e.gamma, e.beta);
-    held ??= now; // straight is how the phone was held at the start
-    tilt = tilt ? tilt.lerp(now.subtract(held), .2) : vec2(); // the hand's trembling, filtered
+    tilt = tilt ? tilt.lerp(now, .2) : now; // the hand's trembling, filtered
   });
   addEventListener("devicemotion", (e) => {
     const a = e.acceleration;
@@ -104,13 +105,15 @@ function tiltInit() {
   }
 }
 
-/** `tilt`: how far the phone is tilted from how it was held at the start, -1 to 1 each way: x to
- *  the right, y back (the top edge toward the player), 0 when held straight. Soft near straight,
- *  for small corrections. Undefined with no tilt to read: on the laptop, or before the phone says.
- *  As a speed it rolls (`moveInput` gives it); as a place it aims, and comes back to the middle
- *  when the phone does: `aim = tiltInput()?.scale(range) ?? aim.add(moveInput().scale(rate))`. */
+/** `tilt`: where the phone's back points, as a camera's or the spout of a bottle held in both
+ *  hands, -1 to 1 each way: x right (the left edge down), y up (the top edge back, toward the
+ *  player), 0 at rest (`TILT_REST`), and at the edge past the range. Soft near rest, for small
+ *  corrections. Undefined with no tilt to read: on the laptop, or before the phone says. It aims,
+ *  as a place that comes back to the middle with the phone:
+ *  `aim = tiltInput()?.scale(range) ?? aim.add(moveInput().scale(rate))`. */
 export function tiltInput(): Vector2 | undefined {
   if (!tilt) return;
+  const from = tilt.subtract(TILT_REST);
   const axis = (deg: number, range: number) => {
     const t = clamp(
       sign(deg) * max(0, abs(deg) - TILT_DEAD) / (range - TILT_DEAD),
@@ -119,13 +122,7 @@ export function tiltInput(): Vector2 | undefined {
     );
     return t * .4 + t * abs(t) * .6;
   };
-  return vec2(axis(tilt.x, TILT_RANGE.x), axis(tilt.y, TILT_RANGE.y));
-}
-
-/** `tilt`: how the phone is held now becomes straight (after a pause, or at a new round). */
-export function tiltStraight() {
-  held = held && tilt ? held.add(tilt) : held;
-  tilt = tilt && vec2();
+  return vec2(-axis(from.x, TILT_RANGE.x), axis(from.y, TILT_RANGE.y));
 }
 
 // a shake is action 1 pressed for the frame that first asks after it
@@ -135,8 +132,8 @@ function shook(): boolean {
 }
 
 /** Where the player moves, length 0 to 1: the arrows or WASD, a gamepad's stick or cross, the
- *  touch cross, the phone's tilt. The `point` scheme's finger is not here: it is
- *  `pointerPressed`/`pointerHeld`. */
+ *  touch cross, the phone's tilt (downhill, where a ball on it rolls: `tiltInput` the other way).
+ *  The `point` scheme's finger is not here: it is `pointerPressed`/`pointerHeld`. */
 export function moveInput(): Vector2 {
   const keys = keyDirection();
   if (keys.lengthSquared()) return keys;
@@ -144,7 +141,7 @@ export function moveInput(): Vector2 {
   if (stick.lengthSquared()) return stick;
   const dpad = gamepadDpad();
   if (dpad.lengthSquared() || scheme != "tilt") return dpad;
-  return tiltInput() ?? dpad;
+  return tiltInput()?.scale(-1) ?? dpad;
 }
 
 /** Was action `i` (0 the main one) pressed this frame: its key, its button, its touch or, with
