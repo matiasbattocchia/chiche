@@ -67,3 +67,17 @@ page that breaks breaks in front of the user, so catch it before they do.
 | Backend | server errors, when the project has one | its own log, kept like `vite.log` |
 
 The console log starts a new file with each `goto`.
+
+A screenshot shows what is there, not whether it is right: whether the far tiles are smaller
+than the near ones, two things lined up, a button inside the screen. That is a number: read it
+from the page with `playwright-cli eval` (a value the code puts on `globalThis`, or an element's
+box), and say it in the result. A size, a place or a reach is said right only when a number
+shows it.
+
+## A fix that comes back
+
+A message that asks to fix again what was fixed before, or another thing of the same kind (the
+floor's perspective, after the chairs'), has a cause the fixes share and didn't reach. Find it
+before patching what the message names, fix it once, where everything goes through it, and say
+so in the result in the user's terms: "the floor and the chairs were drawn with a wrong depth;
+now everything is".

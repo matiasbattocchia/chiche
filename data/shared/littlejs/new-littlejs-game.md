@@ -54,6 +54,7 @@ Pattern source — pick the closest **template** (`littlejs/templates/*.html`):
 | Runtime tuning controls                             | `tweakableGame.html`     | — (engine plugin, `tweak()`, debug builds only)                                                                                                          |
 | Canvas UI widgets                                   | `uiGame.html`            | `menus.ts` (+ `uiGame.html` patterns)                                                                                                                    |
 | Sound effects + screen shake (any game)             | (read `gameFx.ts` API)   | `gameFx.ts`                                                                                                                                              |
+| A view with depth that stays put (a table, a road)  | `game.html`              | `perspective.ts` — `littlejs/main.md`, Depth                                                                                                             |
 | Computer opponent, turn-based 2-player              | `boardGame.html` (board) | `gameAI.ts` — describe the moves, `await alphaBetaAI(game, state, depth)`; a state keeps the position in `board` and the side to move in `currentPlayer` |
 
 Combine rows freely — `gameFx.ts` stacks onto any other choice. A template's imports name the helpers its code uses: copy the ones whose code you take. A helper imports the helpers it needs from beside it: `cards.ts` needs `textureGenerator.ts`. The templates are ES modules like a game, importing the engine and the helpers beside them; read them for patterns, don't serve them. Their code is untyped JavaScript: what you take from them gets its types in `game.ts`.
@@ -84,7 +85,7 @@ Combine rows freely — `gameFx.ts` stacks onto any other choice. A template's i
 
 **Never substitute a CDN for the LittleJS engine.** The engine is the npm package in the project's `node_modules/`. If `deno install` fails, STOP and tell the user plainly that the scaffold is incomplete and why. Do not paper over it with a CDN `<script src>`. A 3D game needs no CDN either — LittleJS 3D is inside the engine file. Confirm no `<script src>` in `index.html` points at an external URL, and that `game.ts` imports only `'littlejsengine'` and its own files.
 
-**Never review, verify, or summarize the contents of the engine or of the helper modules you copied** — they are third-party code, all but `controls.ts` and `difficulty.ts`, which are checked and linted with the game. The game code you wrote is the only thing that deserves review.
+**Never review, verify, or summarize the contents of the engine or of the helper modules you copied** — they are third-party code, all but `controls.ts`, `difficulty.ts` and `perspective.ts`, which are checked and linted with the game. The game code you wrote is the only thing that deserves review.
 
 Then serve it and show it, as for any web project, and in the same turn make it playable: the first step in `littlejs/main.md`, the player moving through `controls.ts` with the genre's scheme over a plain world, with a particle effect. A few dozen lines, plain shapes, rough is fine. End the turn there, with what to try and the plan.
 

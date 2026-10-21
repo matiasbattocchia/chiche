@@ -135,9 +135,9 @@ in the plan, and the turn ends with the road.
   `ui.ts`, `constants.ts`) as it grows.
 - Feedback: type check with `deno check game.ts`, against the engine's typings, strictly (the
   starter's `deno.json`), and lint with `deno lint game.ts` and the game's other modules,
-  `templates/controls.ts` and `templates/difficulty.ts` among them. Not `deno task build`: nothing
-  serves its `dist/`. The other helper modules in `templates/` are third-party: don't lint, check or
-  review them.
+  `templates/controls.ts`, `templates/difficulty.ts` and `templates/perspective.ts` among them. Not
+  `deno task build`: nothing serves its `dist/`. The other helper modules in `templates/` are
+  third-party: don't lint, check or review them.
 - An image the game loads goes in the project's `public/`, named in `engineInit`'s list by its file
   alone (`"city.png"`): Vite serves `public/` at the page's root, and copies it into the build
   `deno task publish` puts online. An image anywhere else is left out of that build.
@@ -165,6 +165,38 @@ in the plan, and the turn ends with the road.
   `collideWithTile(tileData, pos)` for tile collision.
 - Persisted settings and stats go through `readSaveData` / `writeSaveData`.
 
+## Depth
+
+A view with depth that stays put (a table seen from where you sit, a road ahead, a room from its
+door) is 2D, drawn through `templates/perspective.ts`. A view that turns or moves through the world
+(driving, walking around, a camera behind the player) is LittleJS 3D.
+
+- Each thing has a place across (`x`), a distance (`z`: 0 the near edge, 1 the far edge) and a
+  height (`h`), and is drawn at `toScreen(x, z, h)`, `scaleAt(z)` times its size, the farthest first
+  (`things.sort(farFirst)`). When a 2D game turns into such a view, all its things get a distance in
+  that one step.
+- Evenly spaced things (tiles, chairs, a tablecloth's squares) go at evenly spaced distances, and
+  the perspective shrinks the far ones. Nothing gets a shrinking of its own: a surface that looks
+  wrong is at a wrong distance, or drawn without `toScreen`.
+- What the player moves over the ground (an aim, a marker) moves up the screen evenly, as fast near
+  as far: keep it, and the tolerances it is compared with, in `onScreen(z)` terms, and turn it into
+  a distance with `depthAt`.
+
+## Checking a step
+
+A screenshot shows what is there, not whether it is right. Whether the far tiles are smaller, a
+glass can be filled, or the shadow is where the soda lands, are numbers: read them from the game,
+and say them in the result ("the tiles are 1.2, .8 and .5 tall, front to back").
+
+- A hook on `globalThis` gives them (`littlejs/littlejs-conventions`), read with
+  `playwright-cli eval "() => game.tileSizes()"`.
+- What the player has to reach (a glass to fill, a gap to jump, a target to hit) is checked by
+  sweeping: a hook runs the game's own step for each input the player can give (every aim, every
+  power, a few frames each), and counts what each reaches. Each target is reached by some inputs and
+  missed by others: one that no input reaches, or that every input does, is a bug of the step.
+- Something that shows where a thing will land or go (a shadow, a dotted line) is computed with the
+  same function that moves the thing, never a formula of its own.
+
 ## Controls and devices
 
 The game is played on a phone or a tablet first, and on the laptop's keyboard and with a gamepad as
@@ -179,7 +211,16 @@ first turn, and reads moving and its actions only through it.
 - The schemes. `pad`: a cross under the left thumb and the buttons under the right, the phone held
   sideways. `point`: one finger on the upright phone; a tap is where to go or what to act on, a
   finger held down drags, and the action buttons are tapped. `tap`: the whole upright screen is the
-  main action, and with a second, its left half is that one.
+  main action, and with a second, its left half is that one. `tilt`, when the user asks to tilt or
+  shake the phone: tilting the upright phone moves, a tap anywhere is the main action, and a shake
+  is the second, whose button at the bottom left can be tapped too.
+- `tilt`: `moveInput()` is the tilt as a speed, which rolls; `tiltInput()` is it as a place, for an
+  aim that comes back to the middle with the phone. Straight is how the phone was held at the start,
+  and `tiltStraight()` makes it how it is held now (after a pause). How it feels is settled in
+  `controls.ts`: a request for less sensitive is a wider `TILT_RANGE` in the game's copy, one for
+  the other way is a sign in the game. Tried headless with the phone's own events:
+  `playwright-cli -s=phone eval "() => dispatchEvent(Object.assign(new Event('deviceorientation'), {beta: 70, gamma: 20}))"`,
+  and a shake, `devicemotion` with `{acceleration: {x: 20, y: 0, z: 0}}`.
 - Two actions: Space and X. A third (C) and a fourth (Z) only when the genre can't go without them
   and no key can take them on by what fits: say why in the result. Keys are few: a thing and its
   undoing share one (in and out of the tank), one key does what fits where the player is (Space
@@ -206,7 +247,8 @@ They are not part of the engine. To use one, copy it from `littlejs/templates/` 
 engine API.
 
 - `controls.ts` and `difficulty.ts`: the controls and the difficulty, above. Every game has both.
-  They are the games' own, typed and checked with the game.
+  They are the games' own, typed and checked with the game, and so is `perspective.ts`, a view with
+  depth (Depth, above).
 - `menus.ts`: title, pause and options menus, dialogs, toolbars, toasts and medals; don't build DOM
   menus by hand. `createTitleMenu`, `createPauseMenu`, `createOptionsMenu`, `createMenu`,
   `createToolbar`, `showConfirmDialog`, `showAlertDialog`, `showGameOverDialog`, `MenuMedal`. Pause
