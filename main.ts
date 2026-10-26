@@ -455,27 +455,25 @@ let doorBusy = false;
 let doorGone = false;
 /**
  * While the coding agent is busy and nobody has spoken for this long, an update goes as a
- * WHEN_IDLE answer, so the voice tells the user that both of them are still there.
+ * WHEN_IDLE answer, so the voice tells the user that both of them are still there: once, until
+ * the user speaks (`asked`).
  */
 const UPDATE_QUIET_MS = 30_000;
 /**
- * After a result, when nobody has spoken for this long and nothing was sent, the next step of
- * the plan goes to the coding agent by itself, with its default, and the voice hears of it as a
- * `sent:` line. Once per quiet stretch: a result starts a new one. The voice is told to send the
- * next step at once (INSTRUCTIONS.md), and in prueba4 (log/2026-10-13T22-54-52) it did so by
- * itself at one result in fifteen: at the others it announced the step or asked about it and
- * waited, 65–191 s, until the user asked what happened.
+ * After a result, when nobody has spoken for this long and nothing was sent, the user is likely
+ * playing what was made: the voice hears a `quiet:` line and asks them once how it goes. Nothing
+ * goes to the coding agent by itself: what comes next is the user's, out of what they say. In
+ * prueba7 (log/2026-10-25T15-56-59) the steps that went by themselves, and the voice's own ideas
+ * sent after them, built for 13 minutes past the user's last word.
  */
-const GO_ON_QUIET_MS = 45_000;
+const FOLLOW_UP_QUIET_MS = 45_000;
+/** The quiet stretch since the last result had its follow-up. */
+let followedUp = false;
 /**
- * How many steps go by themselves in a row with no word from the user: a bound on working
- * alone, a few minutes of it, after which the next step waits for the user.
+ * The voice was asked to speak (an update, a follow-up) and the user hasn't spoken since: no
+ * other ask goes until they do, or a result comes. An ask nobody answers is the last one.
  */
-const GO_ON_MAX = 3;
-/** The quiet stretch since the last result already had its send. */
-let wentOn = false;
-/** Steps sent by themselves since the user last spoke. */
-let alone = 0;
+let asked = false;
 /** Last time anyone spoke: the mic opening or closing, the voice's audio, a turn completing. */
 let lastTalk = performance.now();
 
@@ -502,7 +500,7 @@ function trouble(error: string): string {
 function failed(error: string) {
   concluded = true;
   awaiting = false;
-  wentOn = true; // no step goes by itself after an error: a quota used up would get a retry
+  followedUp = true; // the error is what the voice says: no follow-up asks how it goes
   term.dim(`agent error: ${clip(error.replaceAll("\n", " "), 200)}`);
   forward(trouble(error), Scheduling.WHEN_IDLE);
 }
@@ -549,7 +547,7 @@ if (!noLiquen) {
       if (up.door && isReply(e, up.door.address)) {
         concluded = true;
         awaiting = false;
-        wentOn = false;
+        followedUp = asked = false;
         return forward(`result: ${textOf(e)}`, Scheduling.WHEN_IDLE);
       }
       const error = errorOf(e);
@@ -620,7 +618,6 @@ async function input(callId: string, text: string) {
   // the newer call is the channel from here on; the older one is left open, with nothing
   // more to carry (whether the model minds a call never closed is not measured yet)
   channel = callId;
-  alone = 0;
   const r = await send(text);
   if (channel !== callId) return; // cancelled or superseded meanwhile
   // once the voice has spoken this turn, WHEN_IDLE would have it speak again once it's idle
@@ -647,8 +644,10 @@ const quiet = () =>
  */
 function update() {
   const now = performance.now();
-  if (busySince === undefined || !channel || !quiet() || now - lastTalk < UPDATE_QUIET_MS) return;
-  lastTalk = now; // the next one after another quiet stretch, whether the voice speaks or not
+  if (
+    busySince === undefined || !channel || asked || !quiet() || now - lastTalk < UPDATE_QUIET_MS
+  ) return;
+  asked = true;
   const s = Math.round((now - busySince) / 1000);
   forward(
     `update: still ${state === "idle" ? "busy" : state}, ${s} s in`,
@@ -657,29 +656,18 @@ function update() {
 }
 
 /**
- * The next step of the plan, sent by itself: the coding agent answered, and nobody has spoken
- * nor sent anything since for a while (GO_ON_QUIET_MS).
+ * A follow-up: the coding agent answered, and nobody has spoken nor sent anything since for a
+ * while (FOLLOW_UP_QUIET_MS).
  */
-async function goOn() {
+function followUp() {
   const now = performance.now();
   if (
-    doorGone || !channel || !concluded || awaiting || doorBusy || state !== "idle" || wentOn ||
-    alone >= GO_ON_MAX || !quiet() || now - lastTalk < GO_ON_QUIET_MS
+    doorGone || !channel || !concluded || awaiting || doorBusy || state !== "idle" || followedUp ||
+    asked || !quiet() || now - lastTalk < FOLLOW_UP_QUIET_MS
   ) return;
-  wentOn = true;
-  alone++;
+  followedUp = asked = true;
   const s = Math.round((now - lastTalk) / 1000);
-  const r = await send(
-    `The user has been quiet for ${s} s. Go on with the next step of the plan, with your ` +
-      "default for its choice.",
-  );
-  forward(
-    r.ok
-      ? `sent: the user was quiet for ${s} s, so the next step of the plan went by itself, ` +
-        "with its default"
-      : `error: ${r.error ?? "not sent"}`,
-    Scheduling.WHEN_IDLE,
-  );
+  forward(`quiet: the user has been quiet for ${s} s since the result`, Scheduling.WHEN_IDLE);
 }
 
 // 4. audio. Two blocks stand between the user and the voice. The mixer's mute (mic and
@@ -771,7 +759,7 @@ function mic(now: boolean, why: string, push = false) {
   open = now;
   lastTalk = performance.now();
   if (open) {
-    alone = 0; // the user speaks: the steps that went by themselves start over
+    asked = false; // the user speaks: the voice may ask again
     const released = held?.at ?? (closing?.push ? closing.at : undefined);
     if (push && released !== undefined) {
       clearTimeout(held?.timer);
@@ -964,7 +952,7 @@ term.pin(noLiquen ? 2 : 3);
 up.status = setInterval(status, STATUS_MS);
 up.updates = setInterval(() => {
   update();
-  goOn();
+  followUp();
 }, 1000);
 
 /**

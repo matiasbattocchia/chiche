@@ -91,7 +91,7 @@ Then serve it and show it, as for any web project, and in the same turn make it 
 
 ## Step 4 — One step per turn
 
-Each later turn adds one step of the plan, the next one or the one the user picked, as `littlejs/main.md` sizes them: one thing to see or try, tens of lines, made with edits. For a pinball: a ball falls on the table and the arrows flip two paddles (playable, the first turn), then the ball bounces off the walls, then bumpers, then the score, then sparks on a bumper hit. A bug that keeps the user from trying the step is part of it; any other goes in the plan. Write it into `game.ts` (split into more modules — `player.ts`, `ui.ts`, `constants.ts` — only as it grows; `game.ts` imports them). Pull concrete patterns out of the chosen template(s) by reading them from `littlejs/templates/`. Follow the `littlejs/littlejs-conventions` skill for engine rules (imports and setters, engine built-ins, pitfalls).
+Each later turn adds the step the message asks for, as `littlejs/main.md` sizes it: one thing to see or try, tens of lines, made with edits. For a pinball: a ball falls on the table and the arrows flip two paddles (playable, the first turn), then the ball bounces off the walls, then bumpers, then the score, then sparks on a bumper hit. A bug that keeps the user from trying the step is part of it; any other goes in the plan. Write it into `game.ts` (split into more modules — `player.ts`, `ui.ts`, `constants.ts` — only as it grows; `game.ts` imports them). Pull concrete patterns out of the chosen template(s) by reading them from `littlejs/templates/`. Follow the `littlejs/littlejs-conventions` skill for engine rules (imports and setters, engine built-ins, pitfalls).
 
 ## Step 5 — Check each step before you end the turn
 
@@ -118,7 +118,7 @@ engineStep(600); // advance exactly 10 seconds of game time at 60fps
 
 Both flags must be set BEFORE `engineInit`, one `engineStep(n)` runs exactly `n` fixed updates at `timeScale` 1, and `engineStep` respects `paused` the same way the normal loop does. This needs a small harness that loads the engine outside the browser, so reach for it when time-dependent behaviour is the thing in doubt — not for every game. Grep `reference.md` for "Headless testing" via the `littlejs/littlejs-api` skill for the full contract.
 
-Then end the turn: say what to try, what you assumed, and the next step of the plan.
+Then end the turn as `littlejs/main.md` says: what to try, what you assumed, and the plan.
 
 ## Common mistakes
 
