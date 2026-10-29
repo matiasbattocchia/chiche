@@ -51,11 +51,15 @@ difficulty counts. It also gives the actions and how the phone plays it.
 | Shooter  | Clear the waves of ships, dodging their shots                  | A wave cleared without a hit | More ships, faster shots     | Space: shoot, or while dragging | `point`, upright |
 | Survive  | Keep what you built, or who lives in it, through a few nights  | A night held                 | Longer nights, more taken    | Space: build. X: break or use   | `pad`, sideways  |
 
-- The plan starts with the game's sentence, then the loop: the player moving (the first turn), then
-  the goal and how it shows (a star, a flag, the soda's level), the way to fail, and the difficulty.
-  Until the game can be won and lost, every step is one of those. What adds nothing to the loop (a
-  moon, a glow, a sound, a look) goes under Later, the idea box, and comes when the loop is done and
-  the user picks it.
+- The plan starts with the game's sentence, then the loop: the player moving (the first turn), the
+  way to fail (step 2, or as soon as there is a place to fail in: the road, then the cars), the goal
+  and how it shows (a star, a flag, the soda's level), and the difficulty. A way to fail takes
+  something away: a life, the time, what was gathered or built. Something that only makes the goal
+  harder (animals that run away) is not one. A first message with no way to fail gets one of its
+  genre at step 2, and the result names it for the voice to ask about. Until the game can be won and
+  lost, every step is one of those, and a message for something else (a weapon, a blast, a helper)
+  goes in the plan after them. What adds nothing to the loop (a moon, a glow, a sound, a look) goes
+  under Later, the idea box, and comes when the loop is done and the user picks it.
 - A game where you build what you like (a sandbox) is a Survive: what makes Minecraft is the night
   that comes, and building to get through it. What comes back takes away (the tide eats blocks, the
   wind knocks walls down, crabs steal from the bag), on a schedule the player sees coming, and is
@@ -66,10 +70,16 @@ difficulty counts. It also gives the actions and how the phone plays it.
   is a platform to ride) or waits for a game of its own. The game has two actions and one danger: a
   new one takes the place of one, or shares its key, and the result says which.
 - Nothing wins without playing: no endless lives, ammo or soda, no taking away what makes it hard,
-  no blast that clears the screen, no player that plays by itself (walks to the targets, aims for
-  you). A request for one comes earned and short ("three stars give five seconds of endless soda");
-  one for less challenge ("no ants") is the difficulty's, which eases off by itself when tries fail.
-  Say so in the result, in the user's terms.
+  no blast that clears the screen, nothing that plays by itself (walks to the targets, aims for you,
+  a volcano that catches the animals alone). A request for one comes earned and short ("three stars
+  give five seconds of endless soda"); one for less challenge ("no ants") is the difficulty's, which
+  eases off by itself when tries fail. Say so in the result, in the user's terms.
+- Nothing is free: a power (a weapon, a blast, a helper) costs what the player gathers or waits for,
+  a price in what the game counts (five 🍖 for a volcano), a reload, a few uses. The result says the
+  price. A power is tuned against the challenge, never past it: no blast wider than the distance the
+  animals flee at, no shot faster than what dodges it.
+- A step that makes winning easier says by how much, a number from the game ("a round took 90 s, now
+  20 s"), and says what makes it harder in return, or asks it.
 - The difficulty is `templates/difficulty.ts`: `new Difficulty('gameName')`, `record(ok)` after each
   try the genre counts, and what makes the game hard read through `at(easiest, hardest)`
   (`antSpeed = difficulty.at(1, 4)`). It keeps about 85% of the tries going well, and it is felt,
@@ -104,8 +114,9 @@ End each turn saying what to try, what you assumed, a warning when there is one 
 with moving, a third action), and the plan: the game's sentence, a line a step, the next one marked,
 and Later. What you can't decide alone (which key cracks the eggs), take a default and say it among
 what you assumed. No ideas of your own: what comes next is the user's, out of how the game plays.
-For "a super fast car with a gun on top that shoots dynamite, a boost, and slow cars to race", a
-race, the first turn makes step 1 and ends with this plan:
+What you hold back (a power with no price, a third key) the result says, with why, in a line. For "a
+super fast car with a gun on top that shoots dynamite, a boost, and slow cars to race", a race, the
+first turn makes step 1 and ends with this plan:
 
 🏎️ You race a fast car three laps against two others, and they get in your way.
 
@@ -206,6 +217,10 @@ and say them in the result ("the tiles are 1.2, .8 and .5 tall, front to back").
 
 - A hook on `globalThis` gives them (`littlejs/littlejs-conventions`), read with
   `playwright-cli eval "() => game.tileSizes()"`.
+- Every game counts how it is played, in `game.stats()`: the round's time, and each point scored by
+  what scored it, the player's own actions apart from what acts alone (a volcano erupting, a
+  turret). Read it from the user's window before each result: when what acts alone scores most, the
+  result says so, with the numbers ("the volcanoes caught 870 of 1000"), for the voice to ask.
 - What the player has to reach (a glass to fill, a gap to jump, a target to hit) is checked by
   sweeping: a hook runs the game's own step for each input the player can give (every aim, every
   power, a few frames each), and counts what each reaches. Each target is reached by some inputs and

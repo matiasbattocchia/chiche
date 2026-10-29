@@ -749,6 +749,12 @@ let waitingSince: number | undefined;
 /** The voice's answer: under way (between its first content and turnComplete), and its audio. */
 let answering = false;
 let received = 0, receivedMs = 0;
+/**
+ * The answer's transcript, each piece with how much of its voice had come when it came: the
+ * server sends voice faster than it plays (in prueba8, 3.7–6.4 s of it unplayed at 5 of 9
+ * interruptions), so where playback stopped splits what the user heard from what they didn't.
+ */
+let spoken: { text: string; at: number }[] = [];
 let link: "connecting" | "live" | "reconnecting" = "connecting";
 
 const chunks = (n: number) => `${n} chunks ${(n * 0.04).toFixed(1)} s`;
@@ -842,6 +848,7 @@ function answered(what: string) {
     answering = true;
     received = 0;
     receivedMs = 0;
+    spoken = [];
   }
 }
 
@@ -978,6 +985,22 @@ async function endSession() {
     );
   }
   saveSession();
+}
+
+/**
+ * The user cut the voice off after `playedMs` of its answer. The Live API keeps in the history
+ * "only the information already sent to the client" (live-guide, Interruptions), which is more
+ * than was played, and a turn in the history can't be edited: what the user didn't hear goes
+ * after it, as context. A transcript piece counts as heard when its voice had played.
+ */
+function cut(playedMs: number) {
+  const heard = spoken.filter((p) => p.at <= playedMs).map((p) => p.text).join("").trim();
+  const unheard = spoken.filter((p) => p.at > playedMs).map((p) => p.text).join("").trim();
+  if (!unheard) return;
+  const line = `cut: the user cut you off. They heard "${heard.slice(-120)}" and not "${unheard}"`;
+  log.line("gem", `cut after ${(playedMs / 1000).toFixed(1)} s: ${unheard.length} chars unheard`);
+  chat(line);
+  up.voice?.context(`(Not a turn, nothing to answer.) ${line}`);
 }
 
 /**
@@ -1127,6 +1150,7 @@ up.voice = await Voice.start({
     },
     interrupted() {
       log.line("gem", "interrupted → flush");
+      if (answering) cut(receivedMs - (up.audio?.unplayedMs ?? 0));
       answering = false;
       up.audio?.flush();
     },
@@ -1145,6 +1169,7 @@ up.voice = await Voice.start({
         return;
       }
       answered("transcript");
+      spoken.push({ text: t, at: receivedMs });
       term.say("🗣️", t, finished);
     },
     turnComplete() {

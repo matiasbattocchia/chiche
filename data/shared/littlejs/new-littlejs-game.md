@@ -87,7 +87,7 @@ Combine rows freely — `gameFx.ts` stacks onto any other choice. A template's i
 
 **Never review, verify, or summarize the contents of the engine or of the helper modules you copied** — they are third-party code, all but `controls.ts`, `difficulty.ts` and `perspective.ts`, which are checked and linted with the game. The game code you wrote is the only thing that deserves review.
 
-Then serve it and show it, as for any web project, and in the same turn make it playable: the first step in `littlejs/main.md`, the player moving through `controls.ts` with the genre's scheme over a plain world, with a particle effect. A few dozen lines, plain shapes, rough is fine. End the turn there, with what to try and the plan.
+Then serve it and show it, as for any web project, and in the same turn make it playable: the first step in `littlejs/main.md`, the player moving through `controls.ts` with the genre's scheme over a plain world, with a particle effect, and `game.stats()` on `globalThis`, the round's time so far (each point gets counted by what scored it as points come). A few dozen lines, plain shapes, rough is fine. End the turn there, with what to try and the plan.
 
 ## Step 4 — One step per turn
 

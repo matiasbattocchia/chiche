@@ -77,6 +77,11 @@ export class Audio {
     return performance.now() < this.#playUntil;
   }
 
+  /** Milliseconds of queued voice not played yet. */
+  get unplayedMs() {
+    return Math.max(0, this.#playUntil - performance.now());
+  }
+
   /** The meters' reading; the mic's part starts over with each read. */
   levels(): Levels {
     const now = performance.now();
