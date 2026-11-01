@@ -265,7 +265,14 @@ function saveSession() {
 function chat(text: string) {
   log.line("chat", text.replaceAll(/\s*\n\s*/g, " "));
 }
-term.said = (who, text) => chat(`${who} ${text}`);
+/** The voice's last line, and when it ended: what a follow-up comes after. */
+let lastSaid: { text: string; at: number } | undefined;
+/** When the user last opened the mic. */
+let lastHeard = 0;
+term.said = (who, text) => {
+  if (who === "🗣️") lastSaid = { text, at: performance.now() };
+  chat(`${who} ${text}`);
+};
 log.line("boot", `session ${sessionName}`);
 
 /** The run's session, from its boot line above; a timeline line is `<stamp> <tag> <text>`. */
@@ -476,6 +483,14 @@ let followedUp = false;
 let asked = false;
 /** Last time anyone spoke: the mic opening or closing, the voice's audio, a turn completing. */
 let lastTalk = performance.now();
+/**
+ * A message reached the coding agent and the user hasn't spoken since: another one now is the
+ * same one again. In the mind run of log/2026-10-31T23-08-29, all 6 sends with no turn of the
+ * user's since the one before were it again, reworded or not (3 right after an update, 2 within
+ * 2 s of the first); prueba8 had none. What goes to the agent is the user's, so a send needs a
+ * turn of theirs before it; an error clears it, for the voice to send again.
+ */
+let sentSinceTurn = false;
 
 /**
  * What a coding agent error means for the work, as the voice hears it; the raw error is the
@@ -501,6 +516,7 @@ function failed(error: string) {
   concluded = true;
   awaiting = false;
   followedUp = true; // the error is what the voice says: no follow-up asks how it goes
+  sentSinceTurn = false;
   term.dim(`agent error: ${clip(error.replaceAll("\n", " "), 200)}`);
   forward(trouble(error), Scheduling.WHEN_IDLE);
 }
@@ -618,13 +634,27 @@ async function input(callId: string, text: string) {
   // the newer call is the channel from here on; the older one is left open, with nothing
   // more to carry (whether the model minds a call never closed is not measured yet)
   channel = callId;
+  if (sentSinceTurn) {
+    chat(`held: ${text}`);
+    up.voice?.answer({
+      id: callId,
+      output: "held: not sent, the coding agent has your last message and the user hasn't " +
+        "spoken since; nothing new to send until they do",
+      scheduling: unlessSpoken(),
+      willContinue: true,
+    });
+    return;
+  }
+  sentSinceTurn = true; // before the wait: a second call can come while this one is sent
   const r = await send(text);
+  const sent = r.ok && typeof r.id === "string";
+  if (!sent) sentSinceTurn = false;
   if (channel !== callId) return; // cancelled or superseded meanwhile
   // once the voice has spoken this turn, WHEN_IDLE would have it speak again once it's idle
   // (measured: a second answer 0.44 s after the first ended); before it has, WHEN_IDLE is what
   // makes it speak at all (measured: a turn that was only the call, and the user's run
   // log/2026-09-25T17-45-59, where a SILENT "sent" left the user with nothing)
-  if (r.ok && typeof r.id === "string") {
+  if (sent) {
     up.voice?.answer({
       id: callId,
       output: "sent",
@@ -667,8 +697,27 @@ function followUp() {
   ) return;
   followedUp = asked = true;
   const s = Math.round((now - lastTalk) / 1000);
+  const said = lastSaid ? `"…${lastSaid.text.slice(-60)}"` : "nothing";
+  const answered = lastSaid && lastHeard > lastSaid.at ? "answered" : "unanswered";
+  followingUp = `${s} s after the result · last said ${said} · ${answered} · ${contextAge()}`;
   forward(`quiet: the user has been quiet for ${s} s since the result`, Scheduling.WHEN_IDLE);
 }
+
+/**
+ * What a follow-up came after, for its usage line to say whether it was spoken: in the mind
+ * run of log/2026-10-31T23-08-29 the voice let all 7 `quiet:`s go silent on its first
+ * connection, and spoke after all 7 on its second, with the same input and scheduling.
+ */
+let followingUp: string | undefined;
+
+/** The last turn's prompt, and whether a new context started since it. */
+let lastPrompt = 0, freshContext = true;
+/** The connections of this run, and when the voice's context last started anew. */
+let connections = 0, contexts = 0, contextSince: number | undefined;
+const contextAge = () =>
+  contextSince === undefined
+    ? `context resumed from an earlier run`
+    : `context ${contexts}, ${Math.round((performance.now() - contextSince) / 60_000)} min old`;
 
 // 4. audio. Two blocks stand between the user and the voice. The mixer's mute (mic and
 // speakers) is outside chiche: it clears both at boot, the one thing it does to them, and then
@@ -766,6 +815,8 @@ function mic(now: boolean, why: string, push = false) {
   lastTalk = performance.now();
   if (open) {
     asked = false; // the user speaks: the voice may ask again
+    lastHeard = performance.now();
+    sentSinceTurn = false;
     const released = held?.at ?? (closing?.push ? closing.at : undefined);
     if (push && released !== undefined) {
       clearTimeout(held?.timer);
@@ -1008,6 +1059,18 @@ function cut(playedMs: number) {
  * over for a changed INSTRUCTIONS.md): what was said before comes back from the log, as context
  * first thing after the instructions. --fresh means no past before the run.
  */
+/** The runs a tail's lines come from, each with how long ago it started. */
+function tailRuns(tail: string) {
+  return [...tail.matchAll(/^\[run (\S+)\]$/gm)].map(([, run]) => {
+    // a run's folder is its start in UTC, with dashes for colons
+    const at = Date.parse(run.replace(/T(\d+)-(\d+)-(\d+)$/, "T$1:$2:$3Z"));
+    const h = (Date.now() - at) / 3_600_000;
+    return `run ${run} (${
+      h < 1 ? "this one" : h < 48 ? `${Math.round(h)} h ago` : `${Math.round(h / 24)} d ago`
+    })`;
+  }).join(", ") || "no run";
+}
+
 async function sendTail() {
   const tail = await logTail();
   if (!tail || !up.voice) return;
@@ -1018,7 +1081,10 @@ async function sendTail() {
   );
   const n = tail.split("\n").length;
   term.dim(`the voice session was lost; it gets the last ${n} lines of the log`);
-  log.line("session", `sent the log's tail as context: ${n} lines, ${tail.length} chars`);
+  log.line(
+    "session",
+    `sent the log's tail as context: ${n} lines, ${tail.length} chars, from ${tailRuns(tail)}`,
+  );
 }
 
 /**
@@ -1061,7 +1127,22 @@ function usage(u: UsageMetadata) {
   if (!outAudio) spend.mute++;
   spend.prompt += prompt, spend.promptAudio += promptAudio, spend.outAudio += outAudio;
   const since = [...sentSince].map(([k, n]) => n > 1 ? `${k}×${n}` : k).join(", ");
+  const followed = [...sentSince.keys()].some((k) => k.startsWith("quiet/"));
   sentSince.clear();
+  // the server says nothing when the context slides (COMPRESSION): the prompt shrinking shows it
+  if (!freshContext && prompt < lastPrompt * 0.75) {
+    log.line("gem", `context slid: prompt ${lastPrompt} → ${prompt}`);
+  }
+  freshContext = false;
+  lastPrompt = prompt;
+  if (followed && followingUp) {
+    log.line(
+      "followup",
+      `${outAudio ? "spoke" : "silent"} · prompt ${prompt}` +
+        `${u.thoughtsTokenCount ? ` · thoughts ${u.thoughtsTokenCount}` : ""} · ${followingUp}`,
+    );
+    followingUp = undefined;
+  }
   log.line(
     "usage",
     `prompt ${prompt} (audio ${promptAudio}) · out audio ${outAudio}` +
@@ -1090,6 +1171,18 @@ up.voice = await Voice.start({
     usage,
     connected(how) {
       link = "live";
+      connections++;
+      if (how === "new") {
+        contexts++;
+        contextSince = performance.now();
+        freshContext = true;
+      }
+      log.line(
+        "session",
+        `connection ${connections} of the run: ${how}${
+          how === "new" ? `, context ${contexts}` : ""
+        }`,
+      );
       if (how === "resumed") resumed = true;
       const minutes = "ago" in last ? Math.max(1, Math.round(last.ago / 60_000)) : 0;
       term.dim(

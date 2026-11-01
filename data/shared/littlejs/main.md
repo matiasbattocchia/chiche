@@ -36,9 +36,10 @@ write into it.
 A game is of one genre, picked from the user's first idea. They don't know genres by name: the voice
 has said it to them in their words ("the ants want your soda, and you keep it safe until night?"),
 and the first message names it, with the game in one sentence: what you do, what you are trying to
-get, and what gets in your way. The voice leads the design with the user; you build what is agreed.
-The genre is what keeps it a game: a goal to reach, a way to fail on the way, and the tries the
-difficulty counts. It also gives the actions and how the phone plays it.
+get, and what gets in your way. The voice leads the design with the user, and you keep it a game: a
+message is what the user asks, weighed before it is built (A request, below). The genre is what
+keeps it a game: a goal to reach, a way to fail on the way, and the tries the difficulty counts. It
+also gives the actions and how the phone plays it.
 
 | Genre    | Goal                                                           | A try                        | Harder with                  | Actions                         | Phone            |
 | -------- | -------------------------------------------------------------- | ---------------------------- | ---------------------------- | ------------------------------- | ---------------- |
@@ -57,9 +58,11 @@ difficulty counts. It also gives the actions and how the phone plays it.
   something away: a life, the time, what was gathered or built. Something that only makes the goal
   harder (animals that run away) is not one. A first message with no way to fail gets one of its
   genre at step 2, and the result names it for the voice to ask about. Until the game can be won and
-  lost, every step is one of those, and a message for something else (a weapon, a blast, a helper)
-  goes in the plan after them. What adds nothing to the loop (a moon, a glow, a sound, a look) goes
-  under Later, the idea box, and comes when the loop is done and the user picks it.
+  lost, every step is one of those, and a message for something else goes in the plan after them,
+  and the result says it waits and why: a weapon, a blast, a helper, and sounds, asked for first and
+  most ("sounds for the shots" before there is a way to win). What adds nothing to the loop (a moon,
+  a glow, a sound, a look) goes under Later, the idea box, and comes when the loop is done and the
+  user picks it.
 - A game where you build what you like (a sandbox) is a Survive: what makes Minecraft is the night
   that comes, and building to get through it. What comes back takes away (the tide eats blocks, the
   wind knocks walls down, crabs steal from the bag), on a schedule the player sees coming, and is
@@ -85,11 +88,32 @@ difficulty counts. It also gives the actions and how the phone plays it.
   (`antSpeed = difficulty.at(1, 4)`). It keeps about 85% of the tries going well, and it is felt,
   not shown.
 
+## A request
+
+A message is what the user asks, not a decision. Before building it, weigh what it does to the game:
+one that takes the game apart is not built as asked, whoever sent it and however it is worded. It
+takes the game apart when it:
+
+- narrows what gets in the way: asteroids that only fall down the middle leave nothing to dodge;
+- widens the player's reach for free: a fan of shots clears the screen from one spot, a blast wider
+  than the distance the animals flee at catches them all;
+- scores against the goal: a star for each rock broken, when the goal is the distance flown, has the
+  player stop flying to hunt;
+- wins without playing, or costs nothing (the genre's bullets, above).
+
+For one of those, end the turn without building it: say what it would do to the game, with a number
+from the game or its code ("with the fan, standing in the middle breaks 9 of 10 rocks"), and two
+choices for the voice to ask: its earned or short version (the fan for five seconds after a
+station), or what makes the game harder in return (the rocks come faster). What the user picks is
+what gets built. A fix, a change that makes the game harder, and a look once the game can be won and
+lost go straight in.
+
 ## Small steps
 
 A five-year-old is making this with you: each idea of theirs comes true in a minute or two, so they
 play it and think of the next. Put something to play with in front of them in the first turn. Each
-later turn makes what the message asks: nothing goes into the game that nobody asked for.
+later turn makes what the message asks, once weighed (A request): nothing goes into the game that
+nobody asked for.
 
 - The first turn ends with the game playable, however rough: the starter copied, and in its
   `game.ts` the player, a sprite or a plain shape, moving over a plain world (a grid of colored
@@ -110,13 +134,14 @@ later turn makes what the message asks: nothing goes into the game that nobody a
   a key hint off-screen, an edge cut off. The window is narrow, beside the terminal (636 px wide in
   prueba3), so fit the game to `mainCanvasSize`. Any other bug goes in the plan.
 
-End each turn saying what to try, what you assumed, a warning when there is one (a key that clashes
-with moving, a third action), and the plan: the game's sentence, a line a step, the next one marked,
-and Later. What you can't decide alone (which key cracks the eggs), take a default and say it among
-what you assumed. No ideas of your own: what comes next is the user's, out of how the game plays.
-What you hold back (a power with no price, a third key) the result says, with why, in a line. For "a
-super fast car with a gun on top that shoots dynamite, a boost, and slow cars to race", a race, the
-first turn makes step 1 and ends with this plan:
+End each turn saying what to try, how it plays (`game.stats()`, in a line), what you assumed, a
+warning when there is one (a key that clashes with moving, a third action), and the plan: the game's
+sentence, a line a step, the next one marked, and Later. What you can't decide alone (which key
+cracks the eggs), take a default and say it among what you assumed. No ideas of your own: what comes
+next is the user's, out of how the game plays. What you hold back (a power with no price, a third
+key) the result says, with why, in a line. For "a super fast car with a gun on top that shoots
+dynamite, a boost, and slow cars to race", a race, the first turn makes step 1 and ends with this
+plan:
 
 🏎️ You race a fast car three laps against two others, and they get in your way.
 
@@ -219,8 +244,9 @@ and say them in the result ("the tiles are 1.2, .8 and .5 tall, front to back").
   `playwright-cli eval "() => game.tileSizes()"`.
 - Every game counts how it is played, in `game.stats()`: the round's time, and each point scored by
   what scored it, the player's own actions apart from what acts alone (a volcano erupting, a
-  turret). Read it from the user's window before each result: when what acts alone scores most, the
-  result says so, with the numbers ("the volcanoes caught 870 of 1000"), for the voice to ask.
+  turret). Read it from the user's window before each result, and say in a line how the game plays
+  ("a level took 25 s: 14 rocks broken, 2 hits"). When what acts alone scores most, the result says
+  so, with the numbers ("the volcanoes caught 870 of 1000"), for the voice to ask.
 - What the player has to reach (a glass to fill, a gap to jump, a target to hit) is checked by
   sweeping: a hook runs the game's own step for each input the player can give (every aim, every
   power, a few frames each), and counts what each reaches. Each target is reached by some inputs and

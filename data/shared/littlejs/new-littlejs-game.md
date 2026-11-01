@@ -91,7 +91,7 @@ Then serve it and show it, as for any web project, and in the same turn make it 
 
 ## Step 4 — One step per turn
 
-Each later turn adds the step the message asks for, as `littlejs/main.md` sizes it: one thing to see or try, tens of lines, made with edits. For a pinball: a ball falls on the table and the arrows flip two paddles (playable, the first turn), then the ball bounces off the walls, then bumpers, then the score, then sparks on a bumper hit. A bug that keeps the user from trying the step is part of it; any other goes in the plan. Write it into `game.ts` (split into more modules — `player.ts`, `ui.ts`, `constants.ts` — only as it grows; `game.ts` imports them). Pull concrete patterns out of the chosen template(s) by reading them from `littlejs/templates/`. Follow the `littlejs/littlejs-conventions` skill for engine rules (imports and setters, engine built-ins, pitfalls).
+Each later turn adds the step the message asks for, once weighed and sized as `littlejs/main.md` says (A request, Small steps): one thing to see or try, tens of lines, made with edits. For a pinball: a ball falls on the table and the arrows flip two paddles (playable, the first turn), then the ball bounces off the walls, then bumpers, then the score, then sparks on a bumper hit. A bug that keeps the user from trying the step is part of it; any other goes in the plan. Write it into `game.ts` (split into more modules — `player.ts`, `ui.ts`, `constants.ts` — only as it grows; `game.ts` imports them). Pull concrete patterns out of the chosen template(s) by reading them from `littlejs/templates/`. Follow the `littlejs/littlejs-conventions` skill for engine rules (imports and setters, engine built-ins, pitfalls).
 
 ## Step 5 — Check each step before you end the turn
 
