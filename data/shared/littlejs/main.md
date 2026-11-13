@@ -31,6 +31,14 @@ write into it.
 - `littlejs/examples/`: the starter projects. `littlejs/templates/`: pages to read patterns from,
   and the helper modules.
 
+## Which game
+
+A conversation makes one game. Until it has one, a message about a game starts a new one, even when
+a game in `projects/` looks like it: a game already made is changed only when the message names it.
+"The plants die if not fed" once went into Sifón, the one game with plants, and three turns went by
+before the user got their new game. Once the conversation has its game, its messages are about that
+one.
+
 ## The game: a genre and a goal
 
 A game is of one genre, picked from the user's first idea. They don't know genres by name: the voice

@@ -481,7 +481,12 @@ let followedUp = false;
  * other ask goes until they do, or a result comes. An ask nobody answers is the last one.
  */
 let asked = false;
-/** Last time anyone spoke: the mic opening or closing, the voice's audio, a turn completing. */
+/**
+ * Last time anyone spoke: the mic opening or closing, the voice's audio, a turn completing. A
+ * result counts too, so the quiet after it starts there: in vivi (log/2026-11-11T00-30-08) the
+ * agent worked 75 s with nobody speaking, and its result went with a `quiet:` 0.6 s behind it,
+ * before the voice had said the result.
+ */
 let lastTalk = performance.now();
 /**
  * A message reached the coding agent and the user hasn't spoken since: another one now is the
@@ -564,6 +569,7 @@ if (!noLiquen) {
         concluded = true;
         awaiting = false;
         followedUp = asked = false;
+        lastTalk = performance.now();
         return forward(`result: ${textOf(e)}`, Scheduling.WHEN_IDLE);
       }
       const error = errorOf(e);

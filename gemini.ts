@@ -104,16 +104,17 @@ export interface VoiceOptions {
 
 export const INPUT_TOOL = {
   name: "input",
-  description: "What you will do next, for your hands to start on. They always take it, even " +
-    "while they are at work: messages queue up and are picked up at the next step, without " +
-    "stopping what is under way.",
+  description: "What the user asks for, for your hands to weigh and start on. They always " +
+    "take it, even while they are at work: messages queue up and are picked up at the next " +
+    "step, without stopping what is under way.",
   behavior: Behavior.NON_BLOCKING,
   parameters: {
     type: Type.OBJECT,
     properties: {
       text: {
         type: Type.STRING,
-        description: "The task, decision or question, as a message to the coding agent.",
+        description: "What the user asks for, decided or asked, as you understood it: " +
+          '"the user asks for…", never an order.',
       },
     },
     required: ["text"],
