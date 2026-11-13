@@ -4,12 +4,13 @@ log/
 # data/ is the agents' volume: track what they are, not what they did
 data/log/
 data/run/
+data/storage/
 # the harness's own words: brought by boot and `liquen update` from the release it runs
 data/system/
 data/shared/.playwright-cli/
 data/shared/projects/*
 !data/shared/projects/.gitkeep
 data/agents/*/*
-!data/agents/*/instructions/
+!data/agents/*/instructions.md
 !data/agents/*/skills/
 !data/agents/*/bin/
