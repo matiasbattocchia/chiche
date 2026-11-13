@@ -54,6 +54,14 @@
     "reload": {
       "command": "deno run -A @liquen/liquen/reload",
       "description": "the running org takes up an edit to config.jsonc"
+    },
+    "config": {
+      "command": "deno run -A --env-file=.env @liquen/liquen/config",
+      "description": "the org's configuration as the store holds it, as YAML"
+    },
+    "log": {
+      "command": "deno run -A --env-file=.env @liquen/liquen/log",
+      "description": "what the agents did: turns, export, errors, tool-calls, requests, spend, tail"
     }
   }
 }

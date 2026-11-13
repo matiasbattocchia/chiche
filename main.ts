@@ -112,7 +112,7 @@ async function playwright(...args: string[]): Promise<boolean> {
 
 // ── boot ────────────────────────────────────────────────────────────────────
 
-/** The coding agent, the same one whoever runs chiche: `chiche` in config.jsonc. */
+/** The coding agent, the same one whoever runs chiche: `chiche` in config.yaml. */
 const AGENT = "chiche";
 /** Who speaks to it, as the agent sees its messages signed: the login running chiche. */
 const user = Deno.env.get("USER") ?? (await import("node:os")).userInfo().username;

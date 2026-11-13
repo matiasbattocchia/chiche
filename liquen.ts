@@ -74,7 +74,7 @@ export class Door {
   }
 
   /** Connect and `tail` `session` (naming it is what births it); throws when nothing answers.
-   *  The session thinks with the model config.jsonc gives the agent, and its shell starts in
+   *  The session thinks with the model the org's configuration gives the agent, and its shell starts in
    *  `shell` (liquen's shell keeps its directory between commands). */
   static async connect(
     dir: string,
